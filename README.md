@@ -46,7 +46,17 @@ docker run --rm -p 3000:3000 `
   -e CHAT_MODEL=gpt-5.4-mini `
   <dockerhub-username>/learnbuddy:latest
 ```
+Hiện tại có thể chạy dự án bằng lệnh 
 
+```powershell
+docker run --rm -p 3000:3000 `
+  -e LLM_PROVIDER=openai `
+  -e OPENAI_API_KEY=<api-key-cua-ho> `
+  -e OPENAI_BASE_URL=https://api.openai.com/v1 `
+  -e OPENAI_CHAT_MODEL=gpt-5.4-mini `
+  -e CHAT_MODEL=gpt-5.4-mini `
+  maitung123/learnmate-demo:latest
+```
 ## Hướng mở rộng
 
 - Adaptive plan: tự điều chỉnh lộ trình dựa trên bài đã hoàn thành, phần cần ôn và điểm quiz.
