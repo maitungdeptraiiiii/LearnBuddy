@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+dist/
+
+# production / local env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript / tooling cache
+*.tsbuildinfo
+.eslintcache
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# deployment caches
+.vercel/
+
+# local demo/export artifacts not needed for this app
+learn-mate-frontend-demo/
+learn-mate-frontend-demo.zip

@@ -1,0 +1,9 @@
+.git
+.next
+node_modules
+npm-debug.log*
+next-dev.*.log
+Dockerfile
+.dockerignore
+learn-mate-frontend-demo
+learn-mate-frontend-demo.zip
