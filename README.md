@@ -1,28 +1,28 @@
 # LearnBuddy
 
-LearnBuddy la ung dung hoc tap ca nhan hoa bang LLM, dua tren bai bao LearnMate. Nguoi hoc nhap chu de, muc tieu, trinh do, thoi luong va phong cach hoc; he thong tao lo trinh hoc rieng, chia bai theo tuan, goi y hoat dong, checkpoint, quiz va ho tro hoi dap voi AI tutor theo tung bai hoc.
+LearnBuddy là ứng dụng học tập cá nhân hóa bằng LLM, dựa trên bài báo LearnMate. Người học nhập chủ đề, mục tiêu, trình độ, thời lượng và phong cách học; hệ thống tạo lộ trình học riêng, chia bài theo tuần, gợi ý hoạt động, checkpoint, quiz và hỗ trợ hỏi đáp với AI tutor theo từng bài học.
 
-Bai bao goc: [LearnMate: Enhancing Online Education with LLM-Powered Personalized Learning Plans and Support](https://arxiv.org/abs/2503.13340)
+Bài báo gốc: [LearnMate: Enhancing Online Education with LLM-Powered Personalized Learning Plans and Support](https://arxiv.org/abs/2503.13340)
 
-## Chay local
+## Chạy local
 
 ```powershell
 npm install
 npm run dev
 ```
 
-Mo:
+Mở:
 
 ```text
 http://127.0.0.1:3000
 ```
 
-## Luong chinh
+## Luồng chính
 
-1. Nhap ho so hoc vien: chu de, muc tieu, trinh do, so tuan, gio/tuan, toc do va phong cach hoc.
-2. Tao lo trinh hoc ca nhan hoa.
-3. Chon tung lesson de xem checkpoint, hoat dong hoc va cap nhat trang thai.
-4. Hoi AI tutor theo ngu canh lesson dang chon.
+1. Nhập hồ sơ học viên: chủ đề, mục tiêu, trình độ, số tuần, giờ/tuần, tốc độ và phong cách học.
+2. Tạo lộ trình học cá nhân hóa.
+3. Chọn từng lesson để xem checkpoint, hoạt động học và cập nhật trạng thái.
+4. Hỏi AI tutor theo ngữ cảnh lesson đang chọn.
 
 ## Build Docker
 
@@ -31,7 +31,7 @@ docker build -t <dockerhub-username>/learnbuddy:latest .
 docker run --rm -p 3000:3000 <dockerhub-username>/learnbuddy:latest
 ```
 
-Neu muon dung OpenAI that, truyen env khi chay container:
+Nếu muốn dùng OpenAI thật, truyền env khi chạy container:
 
 ```powershell
 docker run --rm -p 3000:3000 `
@@ -43,10 +43,10 @@ docker run --rm -p 3000:3000 `
   <dockerhub-username>/learnbuddy:latest
 ```
 
-## Huong mo rong
+## Hướng mở rộng
 
-- Adaptive plan: tu dieu chinh lo trinh dua tren bai da hoan thanh, phan can on va diem quiz.
-- Calendar view: chuyen agenda thanh lich tuan/ngay.
-- Quiz evaluator: cham cau tra loi ngan va ghi lai weak topics.
-- Teacher dashboard: theo doi tien do nhieu hoc vien.
-- RAG extension: upload PDF/slide/giao trinh roi tao plan va tutor answer dua tren tai lieu that.
+- Adaptive plan: tự điều chỉnh lộ trình dựa trên bài đã hoàn thành, phần cần ôn và điểm quiz.
+- Calendar view: chuyển agenda thành lịch tuần/ngày.
+- Quiz evaluator: chấm câu trả lời ngắn và ghi lại weak topics.
+- Teacher dashboard: theo dõi tiến độ nhiều học viên.
+- RAG extension: upload PDF/slide/giáo trình rồi tạo plan và tutor answer dựa trên tài liệu thật.
