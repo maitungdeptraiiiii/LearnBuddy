@@ -4,6 +4,10 @@ LearnBuddy là ứng dụng học tập cá nhân hóa bằng LLM, dựa trên b
 
 Bài báo gốc: [LearnMate: Enhancing Online Education with LLM-Powered Personalized Learning Plans and Support](https://arxiv.org/abs/2503.13340)
 
+## Giao diện demo
+
+![LearnBuddy Demo](./image/Demo.png)
+
 ## Chạy local
 
 ```powershell
