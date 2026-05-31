@@ -276,6 +276,19 @@ export default function Home() {
                   <h2>{plan?.title || 'Lộ trình học'}</h2>
                 </div>
                 <p>{plan?.summary || 'Nhập hồ sơ học viên rồi tạo kế hoạch cá nhân hóa.'}</p>
+                {plan && (
+                  <div className="foundation-box">
+                    <div>
+                      <strong>Kiến thức nền tảng cần có</strong>
+                      <span>Đề xuất {plan.recommendedWeeks} tuần học</span>
+                    </div>
+                    <ul>
+                      {plan.prerequisites.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
               <div className="progress-box">
                 <span>{progress}%</span>
@@ -501,6 +514,8 @@ function topicToPlan(topic: ChatTopic): LearningPlan {
   return {
     title: topic.title,
     summary: topic.goal,
+    prerequisites: [],
+    recommendedWeeks: topic.lessons.length,
     profile: {
       topic: topic.topic,
       goal: topic.goal,

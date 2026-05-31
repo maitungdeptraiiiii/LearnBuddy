@@ -27,6 +27,8 @@ export interface Lesson {
 export interface LearningPlan {
   title: string
   summary: string
+  prerequisites: string[]
+  recommendedWeeks: number
   profile: LearnerProfile
   lessons: Lesson[]
 }

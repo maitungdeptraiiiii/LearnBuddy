@@ -18,16 +18,28 @@ type PlanPhase = {
   checkpoint: string
 }
 
+type TopicProfile = {
+  area: string
+  complexity: number
+  prerequisites: string[]
+}
+
 type PhaseTemplate = {
   title: string
   objective: (topic: string, goal: string) => string
   checkpoint: (topic: string, goal: string, week: number) => string
 }
 
+export function estimateRecommendedWeeks(profile: LearnerProfile) {
+  const topicProfile = analyzeTopic(profile.topic)
+  return recommendWeeks(profile, topicProfile)
+}
+
 export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
-  const totalWeeks = Math.max(1, Math.min(12, profile.durationWeeks || 1))
+  const topicProfile = analyzeTopic(profile.topic)
+  const recommendedWeeks = estimateRecommendedWeeks(profile)
   const minutes = Math.max(45, Math.round(profile.hoursPerWeek * 60 * paceMultiplier[profile.pace]))
-  const phases = buildPhases(profile, totalWeeks)
+  const phases = buildPhases(profile, recommendedWeeks, topicProfile)
 
   const lessons: Lesson[] = phases.map((phase, index) => ({
     id: `week-${index + 1}-${slugify(`${profile.topic}-${profile.goal}`).slice(0, 24)}`,
@@ -35,29 +47,107 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
     title: phase.title,
     objective: phase.objective,
     durationMinutes: minutes,
-    activities: buildActivities(profile, index, totalWeeks),
+    activities: buildActivities(profile, topicProfile, index, recommendedWeeks),
     checkpoint: phase.checkpoint,
     quiz: buildQuiz(profile, phase, index),
     status: 'todo'
   }))
 
   return {
-    title: `Lộ trình học ${profile.topic} trong ${totalWeeks} tuần`,
-    summary: `Kế hoạch dành cho ${levelLabel[profile.level] || profile.level}, tập trung vào mục tiêu: ${profile.goal}. Nội dung được sắp từ nền tảng đến áp dụng thực tế theo phong cách học ${styleLabel(profile.learningStyle)}.`,
-    profile,
+    title: `Lộ trình học ${profile.topic} trong ${recommendedWeeks} tuần`,
+    summary: `Đề xuất ${recommendedWeeks} tuần cho ${levelLabel[profile.level] || profile.level}, với ${profile.hoursPerWeek} giờ/tuần và mục tiêu: ${profile.goal}. Lộ trình bắt đầu từ kiến thức nền tảng, sau đó đi vào thực hành và sản phẩm cuối.`,
+    prerequisites: topicProfile.prerequisites,
+    recommendedWeeks,
+    profile: { ...profile, durationWeeks: recommendedWeeks },
     lessons
   }
 }
 
-function buildPhases(profile: LearnerProfile, totalWeeks: number): PlanPhase[] {
+function analyzeTopic(topic: string): TopicProfile {
+  const normalized = topic.toLowerCase()
+
+  if (includesAny(normalized, ['nlp', 'xử lý ngôn ngữ', 'language processing'])) {
+    return {
+      area: 'nlp',
+      complexity: 4,
+      prerequisites: ['Python cơ bản', 'Tư duy xử lý dữ liệu văn bản', 'Regex và thao tác chuỗi', 'Xác suất/thống kê cơ bản', 'Khái niệm machine learning cơ bản']
+    }
+  }
+
+  if (includesAny(normalized, ['machine learning', 'ml', 'học máy', 'ai'])) {
+    return {
+      area: 'machine-learning',
+      complexity: 4,
+      prerequisites: ['Python cơ bản', 'Đại số tuyến tính cơ bản', 'Xác suất/thống kê cơ bản', 'Pandas/Numpy', 'Tư duy đánh giá mô hình']
+    }
+  }
+
+  if (includesAny(normalized, ['data', 'phân tích dữ liệu', 'analyst', 'pandas'])) {
+    return {
+      area: 'data',
+      complexity: 3,
+      prerequisites: ['Python cơ bản', 'Kiểu dữ liệu và cấu trúc dữ liệu', 'Tư duy bảng dữ liệu', 'Thống kê mô tả cơ bản', 'Đọc biểu đồ và đặt câu hỏi dữ liệu']
+    }
+  }
+
+  if (includesAny(normalized, ['web', 'react', 'next', 'frontend'])) {
+    return {
+      area: 'web',
+      complexity: 3,
+      prerequisites: ['HTML/CSS cơ bản', 'JavaScript cơ bản', 'DOM và event', 'HTTP request/response', 'Tư duy component']
+    }
+  }
+
+  if (includesAny(normalized, ['backend', 'api', 'server', 'database'])) {
+    return {
+      area: 'backend',
+      complexity: 3,
+      prerequisites: ['Một ngôn ngữ lập trình cơ bản', 'HTTP và REST API', 'JSON', 'Cơ sở dữ liệu cơ bản', 'Debug và đọc log']
+    }
+  }
+
+  if (includesAny(normalized, ['python'])) {
+    return {
+      area: 'programming',
+      complexity: 2,
+      prerequisites: ['Tư duy giải quyết vấn đề', 'Cài đặt môi trường lập trình', 'Biến và kiểu dữ liệu cơ bản', 'Điều kiện và vòng lặp', 'Cách chạy và debug chương trình']
+    }
+  }
+
+  return {
+    area: 'general',
+    complexity: 2,
+    prerequisites: ['Khái niệm nhập môn của chủ đề', 'Từ vựng/thuật ngữ cơ bản', 'Cách tìm tài liệu đáng tin cậy', 'Tư duy ghi chú và tự kiểm tra', 'Một mục tiêu thực hành nhỏ']
+  }
+}
+
+function recommendWeeks(profile: LearnerProfile, topicProfile: TopicProfile) {
+  const requestedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || 1))
+  const hours = Math.max(1, profile.hoursPerWeek || 1)
+  const levelAdjustment = profile.level === 'beginner' ? 2 : profile.level === 'intermediate' ? 1 : 0
+  const goalAdjustment = isAmbitiousGoal(profile.goal) ? 1 : 0
+  const paceAdjustment = profile.pace === 'gentle' ? 1 : profile.pace === 'intensive' ? -1 : 0
+  const hoursAdjustment = hours < 4 ? 2 : hours < 7 ? 1 : hours >= 12 ? -1 : 0
+  const recommended = topicProfile.complexity + levelAdjustment + goalAdjustment + paceAdjustment + hoursAdjustment
+
+  return Math.max(requestedWeeks, Math.min(12, Math.max(2, recommended)))
+}
+
+function buildPhases(profile: LearnerProfile, totalWeeks: number, topicProfile: TopicProfile): PlanPhase[] {
   const topic = clean(profile.topic)
   const goalFocus = detectGoalFocus(profile.goal)
-  const sequence = phaseSequence(profile.level, goalFocus)
+  const middleStages = phaseSequence(profile.level, goalFocus, topicProfile.area)
 
   return Array.from({ length: totalWeeks }, (_, index) => {
     const ratio = totalWeeks === 1 ? 1 : index / (totalWeeks - 1)
-    const stage = sequence[Math.min(index, sequence.length - 1)]
-    const week = index + 1
+
+    if (index === 0) {
+      return {
+        title: `Kiến thức nền tảng cần có: ${topic}`,
+        objective: `Rà soát các nền tảng bắt buộc trước khi học ${topic}: ${topicProfile.prerequisites.join(', ')}.`,
+        checkpoint: `Tự đánh giá được nền tảng nào đã ổn, nền tảng nào còn thiếu và cần ôn trước khi đi tiếp.`
+      }
+    }
 
     if (ratio >= 0.8) {
       return {
@@ -67,16 +157,59 @@ function buildPhases(profile: LearnerProfile, totalWeeks: number): PlanPhase[] {
       }
     }
 
+    const stage = middleStages[Math.min(index - 1, middleStages.length - 1)]
     return {
       title: `${stage.title}: ${topic}`,
       objective: stage.objective(topic, profile.goal),
-      checkpoint: stage.checkpoint(topic, profile.goal, week)
+      checkpoint: stage.checkpoint(topic, profile.goal, index + 1)
     }
   })
 }
 
-function phaseSequence(level: string, goalFocus: string): PhaseTemplate[] {
-  const beginner: PhaseTemplate[] = [
+function phaseSequence(level: string, goalFocus: string, area: string): PhaseTemplate[] {
+  const domainPractice = area === 'nlp' ? 'Tiền xử lý, biểu diễn văn bản và đánh giá kết quả' : area === 'data' ? 'Làm sạch, phân tích và trực quan hóa dữ liệu' : 'Bài tập ứng dụng theo chủ đề'
+
+  if (level === 'advanced') {
+    return [
+      {
+        title: 'Đặt bài toán và tiêu chí đánh giá',
+        objective: (topic: string) => `Xác định phạm vi nâng cao của ${topic}, ràng buộc kỹ thuật và tiêu chí thành công.`,
+        checkpoint: () => `Có bản đặc tả ngắn gồm mục tiêu, phạm vi và tiêu chí đánh giá.`
+      },
+      {
+        title: 'Thiết kế giải pháp',
+        objective: (topic: string) => `Thiết kế cách triển khai ${topic} có cấu trúc, có khả năng kiểm thử và mở rộng.`,
+        checkpoint: () => `Trình bày được kiến trúc hoặc quy trình giải pháp trước khi triển khai.`
+      },
+      {
+        title: goalFocus,
+        objective: (_topic: string, goal: string) => `Tinh chỉnh, kiểm thử và đóng gói kết quả theo mục tiêu: ${clean(goal)}.`,
+        checkpoint: () => `Sản phẩm cuối có tài liệu ngắn, demo được và có hướng phát triển tiếp.`
+      }
+    ]
+  }
+
+  if (level === 'intermediate') {
+    return [
+      {
+        title: 'Rà soát nền tảng và lấp lỗ hổng',
+        objective: (topic: string) => `Ôn nhanh ${topic}, xác định phần còn yếu và chuẩn hóa cách thực hành.`,
+        checkpoint: (topic: string) => `Tự đánh giá được 3 điểm mạnh/yếu khi học ${topic}.`
+      },
+      {
+        title: domainPractice,
+        objective: (topic: string) => `Dùng ${topic} để giải quyết bài toán gần với mục tiêu học, có tiêu chí đánh giá rõ ràng.`,
+        checkpoint: () => `Hoàn thành một bài ứng dụng có đầu vào, đầu ra và tiêu chí kiểm tra.`
+      },
+      {
+        title: goalFocus,
+        objective: (_topic: string, goal: string) => `Hoàn thiện sản phẩm/bài tập phục vụ mục tiêu: ${clean(goal)}.`,
+        checkpoint: () => `Có kết quả cuối có thể demo hoặc nộp lại.`
+      }
+    ]
+  }
+
+  return [
     {
       title: 'Làm quen và dựng nền tảng',
       objective: (topic: string) => `Hiểu ${topic} là gì, học các khái niệm cốt lõi và chuẩn bị môi trường học/thực hành phù hợp.`,
@@ -88,7 +221,7 @@ function phaseSequence(level: string, goalFocus: string): PhaseTemplate[] {
       checkpoint: (topic: string) => `Tự tạo được ví dụ nhỏ dùng ít nhất 2 khái niệm trọng tâm của ${topic}.`
     },
     {
-      title: 'Thực hành có hướng dẫn',
+      title: domainPractice,
       objective: (topic: string) => `Áp dụng ${topic} vào bài tập ngắn, nhận diện lỗi phổ biến và sửa theo checkpoint.`,
       checkpoint: () => `Hoàn thành bài thực hành, ghi lại lỗi gặp phải và cách sửa.`
     },
@@ -98,65 +231,14 @@ function phaseSequence(level: string, goalFocus: string): PhaseTemplate[] {
       checkpoint: () => `Có bản nháp đầu tiên và biết phần nào cần bổ sung ở tuần tiếp theo.`
     }
   ]
-
-  const intermediate: PhaseTemplate[] = [
-    {
-      title: 'Rà soát nền tảng và lấp lỗ hổng',
-      objective: (topic: string) => `Ôn nhanh ${topic}, xác định phần còn yếu và chuẩn hóa cách thực hành.`,
-      checkpoint: (topic: string) => `Tự đánh giá được 3 điểm mạnh/yếu khi học ${topic}.`
-    },
-    {
-      title: 'Kỹ thuật ứng dụng',
-      objective: (topic: string) => `Dùng ${topic} để giải quyết bài toán gần với mục tiêu học, có tiêu chí đánh giá rõ ràng.`,
-      checkpoint: () => `Hoàn thành một bài ứng dụng có đầu vào, đầu ra và tiêu chí kiểm tra.`
-    },
-    {
-      title: 'Tối ưu và mở rộng',
-      objective: (topic: string) => `Cải thiện cách làm với ${topic}: tổ chức lại, tối ưu hoặc thêm chức năng nâng cao.`,
-      checkpoint: () => `So sánh được phiên bản trước/sau và nêu lý do cải tiến.`
-    },
-    {
-      title: goalFocus,
-      objective: (_topic: string, goal: string) => `Hoàn thiện sản phẩm/bài tập phục vụ mục tiêu: ${clean(goal)}.`,
-      checkpoint: () => `Có kết quả cuối có thể demo hoặc nộp lại.`
-    }
-  ]
-
-  const advanced: PhaseTemplate[] = [
-    {
-      title: 'Đặt bài toán và tiêu chí đánh giá',
-      objective: (topic: string) => `Xác định phạm vi nâng cao của ${topic}, ràng buộc kỹ thuật và tiêu chí thành công.`,
-      checkpoint: () => `Có bản đặc tả ngắn gồm mục tiêu, phạm vi và tiêu chí đánh giá.`
-    },
-    {
-      title: 'Thiết kế giải pháp',
-      objective: (topic: string) => `Thiết kế cách triển khai ${topic} có cấu trúc, có khả năng kiểm thử và mở rộng.`,
-      checkpoint: () => `Trình bày được kiến trúc hoặc quy trình giải pháp trước khi triển khai.`
-    },
-    {
-      title: 'Triển khai chuyên sâu',
-      objective: (topic: string) => `Xây dựng phần lõi của giải pháp với ${topic}, tập trung vào chất lượng và độ tin cậy.`,
-      checkpoint: () => `Có phiên bản chạy được kèm cách kiểm tra lỗi chính.`
-    },
-    {
-      title: goalFocus,
-      objective: (_topic: string, goal: string) => `Tinh chỉnh, kiểm thử và đóng gói kết quả theo mục tiêu: ${clean(goal)}.`,
-      checkpoint: () => `Sản phẩm cuối có tài liệu ngắn, demo được và có hướng phát triển tiếp.`
-    }
-  ]
-
-  if (level === 'advanced') return advanced
-  if (level === 'intermediate') return intermediate
-  return beginner
 }
 
-function buildActivities(profile: LearnerProfile, index: number, totalWeeks: number): string[] {
+function buildActivities(profile: LearnerProfile, topicProfile: TopicProfile, index: number, totalWeeks: number): string[] {
   const topic = clean(profile.topic)
-  const base = [
-    `Học phần nội dung chính của tuần ${index + 1} về ${topic}`,
-    `Ghi lại 3 ý quan trọng và 1 câu hỏi chưa rõ`,
-    `Tự kiểm tra bằng quiz trước khi chuyển sang tuần tiếp theo`
-  ]
+  const base =
+    index === 0
+      ? [`Đánh dấu nền tảng đã biết: ${topicProfile.prerequisites.join(', ')}`, 'Chọn 1-2 phần yếu nhất để ôn trước', 'Hỏi tutor nếu chưa rõ nên ôn phần nào trước']
+      : [`Học phần nội dung chính của tuần ${index + 1} về ${topic}`, `Ghi lại 3 ý quan trọng và 1 câu hỏi chưa rõ`, `Tự kiểm tra bằng quiz trước khi chuyển sang tuần tiếp theo`]
 
   const progressActivity =
     index === totalWeeks - 1
@@ -179,17 +261,18 @@ function buildQuiz(profile: LearnerProfile, phase: PlanPhase, index: number): st
 
 function detectGoalFocus(goal: string) {
   const normalized = goal.toLowerCase()
-  if (normalized.includes('project') || normalized.includes('dự án') || normalized.includes('sản phẩm')) return 'Xây dựng mini project'
-  if (normalized.includes('thi') || normalized.includes('chứng chỉ') || normalized.includes('exam')) return 'Ôn luyện theo dạng bài kiểm tra'
-  if (normalized.includes('giao tiếp') || normalized.includes('phỏng vấn') || normalized.includes('interview')) return 'Luyện tình huống thực tế'
+  if (includesAny(normalized, ['project', 'dự án', 'sản phẩm'])) return 'Xây dựng mini project'
+  if (includesAny(normalized, ['thi', 'chứng chỉ', 'exam'])) return 'Ôn luyện theo dạng bài kiểm tra'
+  if (includesAny(normalized, ['giao tiếp', 'phỏng vấn', 'interview'])) return 'Luyện tình huống thực tế'
   return 'Áp dụng vào mục tiêu cá nhân'
 }
 
-function styleLabel(style: LearnerProfile['learningStyle']) {
-  if (style === 'practice') return 'thực hành'
-  if (style === 'project') return 'project'
-  if (style === 'concepts') return 'khái niệm'
-  return 'kết hợp'
+function isAmbitiousGoal(goal: string) {
+  return includesAny(goal.toLowerCase(), ['project', 'dự án', 'sản phẩm', 'phỏng vấn', 'interview', 'chứng chỉ', 'portfolio'])
+}
+
+function includesAny(value: string, keywords: string[]) {
+  return keywords.some((keyword) => value.includes(keyword))
 }
 
 function clean(value: string) {
