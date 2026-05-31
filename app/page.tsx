@@ -22,11 +22,13 @@ const statusLabel: Record<LessonStatus, string> = {
   review: 'Cần ôn'
 }
 
+type ChatHistoryByLesson = Record<string, ChatMessage[]>
+
 export default function Home() {
   const [profile, setProfile] = useState<LearnerProfile>(initialProfile)
   const [plan, setPlan] = useState<LearningPlan | null>(null)
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [chatHistoryByLesson, setChatHistoryByLesson] = useState<ChatHistoryByLesson>({})
   const [question, setQuestion] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAsking, setIsAsking] = useState(false)
@@ -35,6 +37,8 @@ export default function Home() {
     () => plan?.lessons.find((lesson) => lesson.id === selectedLessonId) || plan?.lessons[0] || null,
     [plan, selectedLessonId]
   )
+
+  const messages = selectedLessonId ? chatHistoryByLesson[selectedLessonId] || [] : []
 
   const progress = useMemo(() => {
     if (!plan) return 0
@@ -45,7 +49,7 @@ export default function Home() {
   async function generatePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsGenerating(true)
-    setMessages([])
+    setChatHistoryByLesson({})
 
     const response = await fetch('/api/plan', {
       method: 'POST',
@@ -57,7 +61,7 @@ export default function Home() {
     const firstLesson = nextPlan.lessons[0] || null
     setPlan(nextPlan)
     setSelectedLessonId(firstLesson?.id || null)
-    setMessages(firstLesson ? [buildLessonSupportMessage(firstLesson)] : [])
+    setChatHistoryByLesson(firstLesson ? { [firstLesson.id]: [buildLessonSupportMessage(firstLesson)] } : {})
     setIsGenerating(false)
   }
 
@@ -65,7 +69,11 @@ export default function Home() {
     const lesson = plan?.lessons.find((item) => item.id === lessonId)
     setSelectedLessonId(lessonId)
     setQuestion('')
-    if (lesson) setMessages([buildLessonSupportMessage(lesson)])
+    if (!lesson) return
+    setChatHistoryByLesson((current) => {
+      if (current[lessonId]) return current
+      return { ...current, [lessonId]: [buildLessonSupportMessage(lesson)] }
+    })
   }
 
   function updateLessonStatus(lessonId: string, status: LessonStatus) {
@@ -80,11 +88,13 @@ export default function Home() {
 
   async function sendTutorQuestion(rawQuestion: string) {
     const trimmed = rawQuestion.trim()
-    if (!trimmed || !plan) return
+    if (!trimmed || !plan || !selectedLesson || !selectedLessonId) return
 
+    const lessonId = selectedLessonId
+    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(selectedLesson)]
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
-    const nextMessages = [...messages, userMessage]
-    setMessages(nextMessages)
+    const nextMessages = [...currentMessages, userMessage]
+    setChatHistoryByLesson((current) => ({ ...current, [lessonId]: nextMessages }))
     setQuestion('')
     setIsAsking(true)
 
@@ -92,13 +102,24 @@ export default function Home() {
       const response = await fetch('/api/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed, plan, lesson: selectedLesson, history: messages.slice(-6) })
+        body: JSON.stringify({ question: trimmed, plan, lesson: selectedLesson, history: currentMessages.slice(-6) })
       })
       const payload = await response.json()
-      setMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }])
+      setChatHistoryByLesson((current) => ({
+        ...current,
+        [lessonId]: [...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }]
+      }))
     } finally {
       setIsAsking(false)
     }
+  }
+
+  function clearCurrentChat() {
+    if (!selectedLesson || !selectedLessonId) return
+    setChatHistoryByLesson((current) => ({
+      ...current,
+      [selectedLessonId]: [buildLessonSupportMessage(selectedLesson)]
+    }))
   }
 
   async function askTutor(event: FormEvent<HTMLFormElement>) {
@@ -309,7 +330,7 @@ export default function Home() {
             </button>
           </form>
 
-          <button className="secondary-button" type="button" onClick={() => setMessages([])}>
+          <button className="secondary-button" type="button" onClick={clearCurrentChat}>
             <RotateCcw size={16} />
             Xóa chat
           </button>
