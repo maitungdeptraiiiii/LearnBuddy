@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { BookOpen, CalendarDays, CheckCircle2, Clock, Loader2, MessageSquareText, RotateCcw, Sparkles } from 'lucide-react'
-import type { ChatMessage, LearnerProfile, LearningPlan, LessonStatus } from '@/lib/types'
+import type { ChatMessage, LearnerProfile, LearningPlan, Lesson, LessonStatus } from '@/lib/types'
 
 const initialProfile: LearnerProfile = {
   topic: 'Python cơ bản',
@@ -53,9 +53,19 @@ export default function Home() {
       body: JSON.stringify(profile)
     })
     const payload = await response.json()
-    setPlan(payload.plan)
-    setSelectedLessonId(payload.plan.lessons[0]?.id || null)
+    const nextPlan = payload.plan as LearningPlan
+    const firstLesson = nextPlan.lessons[0] || null
+    setPlan(nextPlan)
+    setSelectedLessonId(firstLesson?.id || null)
+    setMessages(firstLesson ? [buildLessonSupportMessage(firstLesson)] : [])
     setIsGenerating(false)
+  }
+
+  function selectLesson(lessonId: string) {
+    const lesson = plan?.lessons.find((item) => item.id === lessonId)
+    setSelectedLessonId(lessonId)
+    setQuestion('')
+    if (lesson) setMessages([buildLessonSupportMessage(lesson)])
   }
 
   function updateLessonStatus(lessonId: string, status: LessonStatus) {
@@ -68,9 +78,8 @@ export default function Home() {
     })
   }
 
-  async function askTutor(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const trimmed = question.trim()
+  async function sendTutorQuestion(rawQuestion: string) {
+    const trimmed = rawQuestion.trim()
     if (!trimmed || !plan) return
 
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
@@ -79,14 +88,22 @@ export default function Home() {
     setQuestion('')
     setIsAsking(true)
 
-    const response = await fetch('/api/tutor', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question: trimmed, plan, lesson: selectedLesson, history: messages.slice(-6) })
-    })
-    const payload = await response.json()
-    setMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }])
-    setIsAsking(false)
+    try {
+      const response = await fetch('/api/tutor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: trimmed, plan, lesson: selectedLesson, history: messages.slice(-6) })
+      })
+      const payload = await response.json()
+      setMessages([...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }])
+    } finally {
+      setIsAsking(false)
+    }
+  }
+
+  async function askTutor(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await sendTutorQuestion(question)
   }
 
   return (
@@ -197,7 +214,7 @@ export default function Home() {
                 <button
                   key={lesson.id}
                   className={`lesson-card ${selectedLesson?.id === lesson.id ? 'active' : ''}`}
-                  onClick={() => setSelectedLessonId(lesson.id)}
+                  onClick={() => selectLesson(lesson.id)}
                   type="button"
                 >
                   <div className="lesson-head">
@@ -241,6 +258,27 @@ export default function Home() {
                   <li key={activity}>{activity}</li>
                 ))}
               </ul>
+              <div className="quiz-list">
+                <strong>Quiz nhanh</strong>
+                {selectedLesson.quiz.map((item) => (
+                  <p key={item}>{item}</p>
+                ))}
+              </div>
+              <button className="complete-button" type="button" onClick={() => updateLessonStatus(selectedLesson.id, 'done')}>
+                <CheckCircle2 size={16} />
+                Đánh dấu hoàn thành
+              </button>
+              <div className="quick-support">
+                <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Giải thích dễ hiểu hơn bài "${selectedLesson.title}"`)}>
+                  Giải thích
+                </button>
+                <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Cho tôi một ví dụ thực hành cho bài "${selectedLesson.title}"`)}>
+                  Ví dụ
+                </button>
+                <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Kiểm tra tôi bằng 3 câu hỏi ngắn về bài "${selectedLesson.title}"`)}>
+                  Kiểm tra
+                </button>
+              </div>
             </div>
           ) : (
             <div className="empty-state compact">Chọn hoặc tạo một bài học để tutor có ngữ cảnh.</div>
@@ -279,6 +317,18 @@ export default function Home() {
       </section>
     </main>
   )
+}
+
+function buildLessonSupportMessage(lesson: Lesson): ChatMessage {
+  return {
+    id: crypto.randomUUID(),
+    role: 'assistant',
+    content: `### Tutor đang theo bài: ${lesson.title}
+
+- Mục tiêu: ${lesson.objective}
+- Checkpoint: ${lesson.checkpoint}
+- Bạn có thể hỏi giải thích, xin ví dụ, hoặc bấm các nút gợi ý bên dưới để được hỗ trợ ngay.`
+  }
 }
 
 function AssistantMessage({ content }: { content: string }) {

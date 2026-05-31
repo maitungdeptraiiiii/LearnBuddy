@@ -298,6 +298,68 @@ button:disabled {
   padding-left: 18px;
 }
 
+.quiz-list {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.quiz-list strong {
+  display: block;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.quiz-list p {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  margin: 8px 0 0;
+  padding: 9px 10px;
+}
+
+.complete-button,
+.quick-support button {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  font-weight: 800;
+}
+
+.complete-button {
+  background: var(--primary);
+  color: white;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 12px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.quick-support {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 10px;
+}
+
+.quick-support button {
+  background: var(--panel);
+  color: var(--primary-dark);
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px;
+}
+
+.quick-support button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .chat-log {
   border: 1px solid var(--line);
   border-radius: 8px;

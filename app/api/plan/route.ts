@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       {
         role: 'system',
         content:
-          'You generate personalized learning plans. Return strict JSON with title, summary, and lessons. Each lesson must include id, week, title, objective, durationMinutes, activities, checkpoint, quiz, status. Use Vietnamese.'
+          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, or learningStyle changes. Use one lesson per week unless the profile explicitly asks for more. Do not repeat lesson titles, objectives, activities, checkpoints, or quizzes across weeks. Each week must represent a clear progression from foundation to application to final outcome. Return strict JSON with title, summary, and lessons. Each lesson must include id, week, title, objective, durationMinutes, activities, checkpoint, quiz, status.'
       },
       {
         role: 'user',
@@ -23,10 +23,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ plan: generateFallbackPlan(profile), mode: 'fallback' })
     }
 
-    return NextResponse.json({ plan: normalizeLearningPlan(parsed, profile), mode: 'law-rag-llm' })
+    const plan = normalizeLearningPlan(parsed, profile)
+    if (hasRepeatedLessons(plan)) {
+      return NextResponse.json({ plan: generateFallbackPlan(profile), mode: 'fallback-duplicate-guard' })
+    }
+
+    return NextResponse.json({ plan, mode: 'law-rag-llm' })
   } catch {
     return NextResponse.json({ plan: generateFallbackPlan(profile), mode: 'fallback' })
   }
+}
+
+function hasRepeatedLessons(plan: LearningPlan) {
+  const seen = new Set<string>()
+  for (const lesson of plan.lessons) {
+    const key = `${lesson.title.trim().toLowerCase()}|${lesson.objective.trim().toLowerCase()}`
+    if (seen.has(key)) return true
+    seen.add(key)
+  }
+  return false
 }
 
 function normalizeLearningPlan(parsed: unknown, profile: LearnerProfile): LearningPlan {
