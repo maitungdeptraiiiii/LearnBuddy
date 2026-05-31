@@ -22,12 +22,24 @@ const statusLabel: Record<LessonStatus, string> = {
   review: 'Cần ôn'
 }
 
+type AppView = 'plan' | 'chat'
 type ChatHistoryByLesson = Record<string, ChatMessage[]>
+type ChatTopic = {
+  id: string
+  topic: string
+  goal: string
+  title: string
+  lessons: Lesson[]
+}
 
 export default function Home() {
   const [profile, setProfile] = useState<LearnerProfile>(initialProfile)
   const [plan, setPlan] = useState<LearningPlan | null>(null)
+  const [view, setView] = useState<AppView>('plan')
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null)
+  const [activeChatTopicId, setActiveChatTopicId] = useState<string | null>(null)
+  const [activeChatLessonId, setActiveChatLessonId] = useState<string | null>(null)
+  const [chatTopics, setChatTopics] = useState<ChatTopic[]>([])
   const [chatHistoryByLesson, setChatHistoryByLesson] = useState<ChatHistoryByLesson>({})
   const [question, setQuestion] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
@@ -38,7 +50,12 @@ export default function Home() {
     [plan, selectedLessonId]
   )
 
-  const messages = selectedLessonId ? chatHistoryByLesson[selectedLessonId] || [] : []
+  const selectedChatTopic = useMemo(() => chatTopics.find((topic) => topic.id === activeChatTopicId) || null, [chatTopics, activeChatTopicId])
+  const selectedChatLesson = useMemo(
+    () => selectedChatTopic?.lessons.find((lesson) => lesson.id === activeChatLessonId) || selectedChatTopic?.lessons[0] || null,
+    [selectedChatTopic, activeChatLessonId]
+  )
+  const messages = selectedChatLesson ? chatHistoryByLesson[selectedChatLesson.id] || [] : []
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
 
   const progress = useMemo(() => {
@@ -50,7 +67,6 @@ export default function Home() {
   async function generatePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsGenerating(true)
-    setChatHistoryByLesson({})
 
     const response = await fetch('/api/plan', {
       method: 'POST',
@@ -60,9 +76,15 @@ export default function Home() {
     const payload = await response.json()
     const nextPlan = payload.plan as LearningPlan
     const firstLesson = nextPlan.lessons[0] || null
+    const nextTopic = buildChatTopic(nextPlan)
+
     setPlan(nextPlan)
     setSelectedLessonId(firstLesson?.id || null)
-    setChatHistoryByLesson(firstLesson ? { [firstLesson.id]: [buildLessonSupportMessage(firstLesson)] } : {})
+    setActiveChatTopicId(nextTopic.id)
+    setActiveChatLessonId(firstLesson?.id || null)
+    setChatTopics((current) => upsertChatTopic(current, nextTopic))
+    if (firstLesson) ensureLessonChat(firstLesson)
+    setView('plan')
     setIsGenerating(false)
   }
 
@@ -70,11 +92,7 @@ export default function Home() {
     const lesson = plan?.lessons.find((item) => item.id === lessonId)
     setSelectedLessonId(lessonId)
     setQuestion('')
-    if (!lesson) return
-    setChatHistoryByLesson((current) => {
-      if (current[lessonId]) return current
-      return { ...current, [lessonId]: [buildLessonSupportMessage(lesson)] }
-    })
+    if (lesson) ensureLessonChat(lesson)
   }
 
   function updateLessonStatus(lessonId: string, status: LessonStatus) {
@@ -87,12 +105,38 @@ export default function Home() {
     })
   }
 
+  function ensureLessonChat(lesson: Lesson) {
+    setChatHistoryByLesson((current) => {
+      if (current[lesson.id]) return current
+      return { ...current, [lesson.id]: [buildLessonSupportMessage(lesson)] }
+    })
+  }
+
+  function openChatForLesson(lesson: Lesson) {
+    if (plan) {
+      const topic = buildChatTopic(plan)
+      setChatTopics((current) => upsertChatTopic(current, topic))
+      setActiveChatTopicId(topic.id)
+    }
+    setActiveChatLessonId(lesson.id)
+    ensureLessonChat(lesson)
+    setQuestion('')
+    setView('chat')
+  }
+
+  function selectChatLesson(topic: ChatTopic, lesson: Lesson) {
+    setActiveChatTopicId(topic.id)
+    setActiveChatLessonId(lesson.id)
+    ensureLessonChat(lesson)
+    setQuestion('')
+  }
+
   async function sendTutorQuestion(rawQuestion: string) {
     const trimmed = rawQuestion.trim()
-    if (!trimmed || !plan || !selectedLesson || !selectedLessonId) return
+    if (!trimmed || !selectedChatTopic || !selectedChatLesson) return
 
-    const lessonId = selectedLessonId
-    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(selectedLesson)]
+    const lessonId = selectedChatLesson.id
+    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(selectedChatLesson)]
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
     const nextMessages = [...currentMessages, userMessage]
     setChatHistoryByLesson((current) => ({ ...current, [lessonId]: nextMessages }))
@@ -103,7 +147,7 @@ export default function Home() {
       const response = await fetch('/api/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed, plan, lesson: selectedLesson, history: currentMessages.slice(-6) })
+        body: JSON.stringify({ question: trimmed, plan: plan || topicToPlan(selectedChatTopic), lesson: selectedChatLesson, history: currentMessages.slice(-6) })
       })
       const payload = await response.json()
       setChatHistoryByLesson((current) => ({
@@ -116,10 +160,10 @@ export default function Home() {
   }
 
   function clearCurrentChat() {
-    if (!selectedLesson || !selectedLessonId) return
+    if (!selectedChatLesson) return
     setChatHistoryByLesson((current) => ({
       ...current,
-      [selectedLessonId]: [buildLessonSupportMessage(selectedLesson)]
+      [selectedChatLesson.id]: [buildLessonSupportMessage(selectedChatLesson)]
     }))
   }
 
@@ -135,217 +179,353 @@ export default function Home() {
           <p className="eyebrow">LearnMate Demo</p>
           <h1>Lộ trình học cá nhân hóa và AI tutor</h1>
         </div>
-        <div className="paper-note">MVP bám sát luồng: profile → plan → tutor → progress</div>
+        <div className="top-actions">
+          <div className="view-switch">
+            <button className={view === 'plan' ? 'active' : ''} type="button" onClick={() => setView('plan')}>
+              Lộ trình
+            </button>
+            <button className={view === 'chat' ? 'active' : ''} type="button" onClick={() => setView('chat')}>
+              Hỏi đáp
+            </button>
+          </div>
+          <div className="paper-note">MVP bám sát luồng: profile → plan → tutor → progress</div>
+        </div>
       </section>
 
-      <section className="workspace">
-        <form className="panel profile-panel" onSubmit={generatePlan}>
-          <div className="panel-heading">
-            <Sparkles size={18} />
-            <h2>Hồ sơ học viên</h2>
-          </div>
-
-          <label>
-            Chủ đề
-            <input value={profile.topic} onChange={(event) => setProfile({ ...profile, topic: event.target.value })} />
-          </label>
-
-          <label>
-            Mục tiêu
-            <textarea value={profile.goal} onChange={(event) => setProfile({ ...profile, goal: event.target.value })} rows={3} />
-          </label>
-
-          <div className="two-cols">
-            <label>
-              Trình độ
-              <select value={profile.level} onChange={(event) => setProfile({ ...profile, level: event.target.value })}>
-                <option value="beginner">Beginner</option>
-                <option value="intermediate">Intermediate</option>
-                <option value="advanced">Advanced</option>
-              </select>
-            </label>
-            <label>
-              Tốc độ
-              <select value={profile.pace} onChange={(event) => setProfile({ ...profile, pace: event.target.value as LearnerProfile['pace'] })}>
-                <option value="gentle">Nhẹ</option>
-                <option value="normal">Vừa</option>
-                <option value="intensive">Cấp tốc</option>
-              </select>
-            </label>
-          </div>
-
-          <div className="two-cols">
-            <label>
-              Số tuần
-              <input
-                type="number"
-                min={1}
-                max={12}
-                value={profile.durationWeeks}
-                onChange={(event) => setProfile({ ...profile, durationWeeks: Number(event.target.value) })}
-              />
-            </label>
-            <label>
-              Giờ/tuần
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={profile.hoursPerWeek}
-                onChange={(event) => setProfile({ ...profile, hoursPerWeek: Number(event.target.value) })}
-              />
-            </label>
-          </div>
-
-          <label>
-            Phong cách học
-            <select value={profile.learningStyle} onChange={(event) => setProfile({ ...profile, learningStyle: event.target.value as LearnerProfile['learningStyle'] })}>
-              <option value="mixed">Kết hợp</option>
-              <option value="concepts">Khái niệm</option>
-              <option value="practice">Thực hành</option>
-              <option value="project">Project</option>
-            </select>
-          </label>
-
-          <button className="primary-button" type="submit" disabled={isGenerating}>
-            {isGenerating ? <Loader2 className="spin" size={18} /> : <CalendarDays size={18} />}
-            Tạo lộ trình học
-          </button>
-        </form>
-
-        <section className="plan-column">
-          <div className="panel plan-summary">
-            <div>
-              <div className="panel-heading">
-                <BookOpen size={18} />
-                <h2>{plan?.title || 'Lộ trình học'}</h2>
-              </div>
-              <p>{plan?.summary || 'Nhập hồ sơ học viên rồi tạo kế hoạch cá nhân hóa.'}</p>
+      {view === 'plan' ? (
+        <section className="workspace">
+          <form className="panel profile-panel" onSubmit={generatePlan}>
+            <div className="panel-heading">
+              <Sparkles size={18} />
+              <h2>Hồ sơ học viên</h2>
             </div>
-            <div className="progress-box">
-              <span>{progress}%</span>
-              <div className="progress-track">
-                <div style={{ width: `${progress}%` }} />
-              </div>
-            </div>
-          </div>
 
-          <div className="lessons">
-            {plan ? (
-              plan.lessons.map((lesson) => (
-                <button
-                  key={lesson.id}
-                  className={`lesson-card ${selectedLesson?.id === lesson.id ? 'active' : ''}`}
-                  onClick={() => selectLesson(lesson.id)}
-                  type="button"
-                >
-                  <div className="lesson-head">
-                    <span>Tuần {lesson.week}</span>
-                    <small>{statusLabel[lesson.status]}</small>
-                  </div>
-                  <strong>{lesson.title}</strong>
-                  <p>{lesson.objective}</p>
-                  <div className="lesson-meta">
-                    <Clock size={15} />
-                    {lesson.durationMinutes} phút
-                  </div>
-                </button>
-              ))
-            ) : (
-              <div className="empty-state">Kế hoạch sẽ xuất hiện ở đây sau khi tạo.</div>
-            )}
-          </div>
-        </section>
+            <label>
+              Chủ đề
+              <input value={profile.topic} onChange={(event) => setProfile({ ...profile, topic: event.target.value })} />
+            </label>
 
-        <aside className="panel tutor-panel">
-          <div className="panel-heading">
-            <MessageSquareText size={18} />
-            <h2>AI tutor</h2>
-          </div>
+            <label>
+              Mục tiêu
+              <textarea value={profile.goal} onChange={(event) => setProfile({ ...profile, goal: event.target.value })} rows={3} />
+            </label>
 
-          {selectedLesson ? (
-            <div className="lesson-detail">
-              <div className="detail-title">
-                <strong>{selectedLesson.title}</strong>
-                <select value={selectedLesson.status} onChange={(event) => updateLessonStatus(selectedLesson.id, event.target.value as LessonStatus)}>
-                  <option value="todo">Chưa học</option>
-                  <option value="doing">Đang học</option>
-                  <option value="done">Hoàn thành</option>
-                  <option value="review">Cần ôn</option>
+            <div className="two-cols">
+              <label>
+                Trình độ
+                <select value={profile.level} onChange={(event) => setProfile({ ...profile, level: event.target.value })}>
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
                 </select>
-              </div>
-              <p>{selectedLesson.checkpoint}</p>
-              <ul>
-                {selectedLesson.activities.map((activity) => (
-                  <li key={activity}>{activity}</li>
-                ))}
-              </ul>
-              <div className="quiz-list">
-                <strong>Quiz nhanh</strong>
-                {selectedLesson.quiz.map((item) => (
-                  <p key={item}>{item}</p>
-                ))}
-              </div>
-              <button className="complete-button" type="button" onClick={() => updateLessonStatus(selectedLesson.id, 'done')}>
-                <CheckCircle2 size={16} />
-                Đánh dấu hoàn thành
-              </button>
-              <div className="quick-support">
-                <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Giải thích dễ hiểu hơn bài "${selectedLesson.title}"`)}>
-                  Giải thích
-                </button>
-                <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Cho tôi một ví dụ thực hành cho bài "${selectedLesson.title}"`)}>
-                  Ví dụ
-                </button>
-                <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Kiểm tra tôi bằng 3 câu hỏi ngắn về bài "${selectedLesson.title}"`)}>
-                  Kiểm tra
-                </button>
-              </div>
+              </label>
+              <label>
+                Tốc độ
+                <select value={profile.pace} onChange={(event) => setProfile({ ...profile, pace: event.target.value as LearnerProfile['pace'] })}>
+                  <option value="gentle">Nhẹ</option>
+                  <option value="normal">Vừa</option>
+                  <option value="intensive">Cấp tốc</option>
+                </select>
+              </label>
             </div>
-          ) : (
-            <div className="empty-state compact">Chọn hoặc tạo một bài học để tutor có ngữ cảnh.</div>
-          )}
 
-          <div className="chat-history-heading">
-            <div>
-              <h3>Lịch sử chat của bài học</h3>
-              <p>{selectedLesson ? selectedLesson.title : 'Chưa chọn bài học'}</p>
+            <div className="two-cols">
+              <label>
+                Số tuần
+                <input
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={profile.durationWeeks}
+                  onChange={(event) => setProfile({ ...profile, durationWeeks: Number(event.target.value) })}
+                />
+              </label>
+              <label>
+                Giờ/tuần
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={profile.hoursPerWeek}
+                  onChange={(event) => setProfile({ ...profile, hoursPerWeek: Number(event.target.value) })}
+                />
+              </label>
             </div>
-            <span>{chatMessageCount} tin nhắn</span>
-          </div>
 
-          <div className="chat-log">
-            {messages.length === 0 ? (
-              <div className="empty-state compact">Chưa có lịch sử chat cho bài học này.</div>
-            ) : (
-              messages.map((message) => (
-                <div key={message.id} className={`message ${message.role}`}>
-                  {message.role === 'assistant' ? <AssistantMessage content={message.content} /> : message.content}
-                </div>
-              ))
-            )}
-            {isAsking && (
-              <div className="message assistant pending">
-                <Loader2 className="spin" size={16} />
-                Đang trả lời...
-              </div>
-            )}
-          </div>
+            <label>
+              Phong cách học
+              <select value={profile.learningStyle} onChange={(event) => setProfile({ ...profile, learningStyle: event.target.value as LearnerProfile['learningStyle'] })}>
+                <option value="mixed">Kết hợp</option>
+                <option value="concepts">Khái niệm</option>
+                <option value="practice">Thực hành</option>
+                <option value="project">Project</option>
+              </select>
+            </label>
 
-          <form className="chat-form" onSubmit={askTutor}>
-            <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Hỏi tutor về bài học này..." />
-            <button type="submit" disabled={!plan || isAsking}>
-              <CheckCircle2 size={18} />
+            <button className="primary-button" type="submit" disabled={isGenerating}>
+              {isGenerating ? <Loader2 className="spin" size={18} /> : <CalendarDays size={18} />}
+              Tạo lộ trình học
             </button>
           </form>
 
-          <button className="secondary-button" type="button" onClick={clearCurrentChat}>
-            <RotateCcw size={16} />
-            Xóa chat
-          </button>
-        </aside>
-      </section>
+          <section className="plan-column">
+            <div className="panel plan-summary">
+              <div>
+                <div className="panel-heading">
+                  <BookOpen size={18} />
+                  <h2>{plan?.title || 'Lộ trình học'}</h2>
+                </div>
+                <p>{plan?.summary || 'Nhập hồ sơ học viên rồi tạo kế hoạch cá nhân hóa.'}</p>
+              </div>
+              <div className="progress-box">
+                <span>{progress}%</span>
+                <div className="progress-track">
+                  <div style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            </div>
+
+            <div className="lessons">
+              {plan ? (
+                plan.lessons.map((lesson) => (
+                  <button
+                    key={lesson.id}
+                    className={`lesson-card ${selectedLesson?.id === lesson.id ? 'active' : ''}`}
+                    onClick={() => selectLesson(lesson.id)}
+                    type="button"
+                  >
+                    <div className="lesson-head">
+                      <span>Tuần {lesson.week}</span>
+                      <small>{statusLabel[lesson.status]}</small>
+                    </div>
+                    <strong>{lesson.title}</strong>
+                    <p>{lesson.objective}</p>
+                    <div className="lesson-meta">
+                      <Clock size={15} />
+                      {lesson.durationMinutes} phút
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="empty-state">Kế hoạch sẽ xuất hiện ở đây sau khi tạo.</div>
+              )}
+            </div>
+          </section>
+
+          <aside className="panel tutor-panel">
+            <div className="panel-heading">
+              <MessageSquareText size={18} />
+              <h2>Gợi ý học tập</h2>
+            </div>
+
+            {selectedLesson ? (
+              <div className="lesson-detail">
+                <div className="detail-title">
+                  <strong>{selectedLesson.title}</strong>
+                  <select value={selectedLesson.status} onChange={(event) => updateLessonStatus(selectedLesson.id, event.target.value as LessonStatus)}>
+                    <option value="todo">Chưa học</option>
+                    <option value="doing">Đang học</option>
+                    <option value="done">Hoàn thành</option>
+                    <option value="review">Cần ôn</option>
+                  </select>
+                </div>
+                <p>{selectedLesson.checkpoint}</p>
+                <ul>
+                  {selectedLesson.activities.map((activity) => (
+                    <li key={activity}>{activity}</li>
+                  ))}
+                </ul>
+                <div className="quiz-list">
+                  <strong>Quiz nhanh</strong>
+                  {selectedLesson.quiz.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </div>
+                <button className="complete-button" type="button" onClick={() => updateLessonStatus(selectedLesson.id, 'done')}>
+                  <CheckCircle2 size={16} />
+                  Đánh dấu hoàn thành
+                </button>
+                <button className="secondary-button" type="button" onClick={() => openChatForLesson(selectedLesson)}>
+                  <MessageSquareText size={16} />
+                  Chuyển sang hỏi đáp
+                </button>
+              </div>
+            ) : (
+              <div className="empty-state compact">Chọn hoặc tạo một bài học để xem gợi ý.</div>
+            )}
+          </aside>
+        </section>
+      ) : (
+        <section className="chat-workspace">
+          <aside className="panel chat-sidebar">
+            <div className="panel-heading">
+              <BookOpen size={18} />
+              <h2>Chủ đề hỏi đáp</h2>
+            </div>
+
+            {chatTopics.length === 0 ? (
+              <div className="empty-state compact">Tạo lộ trình học trước để mở không gian hỏi đáp.</div>
+            ) : (
+              chatTopics.map((topic) => (
+                <div className="chat-topic-group" key={topic.id}>
+                  <button
+                    className={`topic-button ${activeChatTopicId === topic.id ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => {
+                      setActiveChatTopicId(topic.id)
+                      setActiveChatLessonId(topic.lessons[0]?.id || null)
+                      if (topic.lessons[0]) ensureLessonChat(topic.lessons[0])
+                    }}
+                  >
+                    <strong>{topic.topic}</strong>
+                    <span>{topic.lessons.length} bài học</span>
+                  </button>
+                  <div className="chat-lesson-list">
+                    {topic.lessons.map((lesson) => {
+                      const count = (chatHistoryByLesson[lesson.id] || []).filter((message) => !isLessonSupportMessage(message)).length
+                      return (
+                        <button
+                          className={activeChatLessonId === lesson.id ? 'active' : ''}
+                          key={lesson.id}
+                          type="button"
+                          onClick={() => selectChatLesson(topic, lesson)}
+                        >
+                          <span>Tuần {lesson.week}: {lesson.title}</span>
+                          <small>{count} tin</small>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </aside>
+
+          <section className="panel chat-main">
+            {selectedChatLesson ? (
+              <>
+                <div className="chat-main-header">
+                  <div>
+                    <p className="eyebrow">Hỏi đáp theo chủ đề</p>
+                    <h2>{selectedChatLesson.title}</h2>
+                    <p>{selectedChatTopic?.goal}</p>
+                  </div>
+                  <button className="secondary-button" type="button" onClick={() => setView('plan')}>
+                    Quay lại lộ trình
+                  </button>
+                </div>
+
+                <div className="chat-context">
+                  <strong>Ngữ cảnh bài học</strong>
+                  <p>{selectedChatLesson.objective}</p>
+                  <p>{selectedChatLesson.checkpoint}</p>
+                </div>
+
+                <div className="quick-support chat-quick-support">
+                  <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Giải thích dễ hiểu hơn bài "${selectedChatLesson.title}"`)}>
+                    Giải thích
+                  </button>
+                  <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Cho tôi một ví dụ thực hành cho bài "${selectedChatLesson.title}"`)}>
+                    Ví dụ
+                  </button>
+                  <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Kiểm tra tôi bằng 3 câu hỏi ngắn về bài "${selectedChatLesson.title}"`)}>
+                    Kiểm tra
+                  </button>
+                </div>
+
+                <div className="chat-history-heading">
+                  <div>
+                    <h3>Lịch sử đoạn chat</h3>
+                    <p>{selectedChatTopic?.topic} / {selectedChatLesson.title}</p>
+                  </div>
+                  <span>{chatMessageCount} tin nhắn</span>
+                </div>
+
+                <div className="chat-log full">
+                  {messages.length === 0 ? (
+                    <div className="empty-state compact">Chưa có lịch sử chat cho bài học này.</div>
+                  ) : (
+                    messages.map((message) => (
+                      <div key={message.id} className={`message ${message.role}`}>
+                        {message.role === 'assistant' ? <AssistantMessage content={message.content} /> : message.content}
+                      </div>
+                    ))
+                  )}
+                  {isAsking && (
+                    <div className="message assistant pending">
+                      <Loader2 className="spin" size={16} />
+                      Đang trả lời...
+                    </div>
+                  )}
+                </div>
+
+                <form className="chat-form" onSubmit={askTutor}>
+                  <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Hỏi tutor về bài học này..." />
+                  <button type="submit" disabled={!selectedChatLesson || isAsking}>
+                    <CheckCircle2 size={18} />
+                  </button>
+                </form>
+
+                <button className="secondary-button" type="button" onClick={clearCurrentChat}>
+                  <RotateCcw size={16} />
+                  Xóa chat của bài này
+                </button>
+              </>
+            ) : (
+              <div className="empty-state">Chọn một chủ đề hoặc bài học trong sidebar để bắt đầu hỏi đáp.</div>
+            )}
+          </section>
+        </section>
+      )}
     </main>
+  )
+}
+
+function buildChatTopic(plan: LearningPlan): ChatTopic {
+  return {
+    id: stableTopicId(plan.profile),
+    topic: plan.profile.topic,
+    goal: plan.profile.goal,
+    title: plan.title,
+    lessons: plan.lessons
+  }
+}
+
+function upsertChatTopic(current: ChatTopic[], nextTopic: ChatTopic) {
+  const existingIndex = current.findIndex((topic) => topic.id === nextTopic.id)
+  if (existingIndex === -1) return [nextTopic, ...current]
+  return current.map((topic, index) => (index === existingIndex ? nextTopic : topic))
+}
+
+function topicToPlan(topic: ChatTopic): LearningPlan {
+  return {
+    title: topic.title,
+    summary: topic.goal,
+    profile: {
+      topic: topic.topic,
+      goal: topic.goal,
+      level: 'mixed',
+      durationWeeks: topic.lessons.length,
+      hoursPerWeek: 5,
+      pace: 'normal',
+      learningStyle: 'mixed'
+    },
+    lessons: topic.lessons
+  }
+}
+
+function stableTopicId(profile: LearnerProfile) {
+  return slugify(`${profile.topic}-${profile.goal}`)
+}
+
+function slugify(value: string) {
+  return (
+    value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'topic'
   )
 }
 
@@ -361,7 +541,7 @@ function buildLessonSupportMessage(lesson: Lesson): ChatMessage {
 
 - Mục tiêu: ${lesson.objective}
 - Checkpoint: ${lesson.checkpoint}
-- Bạn có thể hỏi giải thích, xin ví dụ, hoặc bấm các nút gợi ý bên dưới để được hỗ trợ ngay.`
+- Bạn có thể hỏi giải thích, xin ví dụ, hoặc bấm các nút gợi ý để được hỗ trợ theo đúng bài học này.`
   }
 }
 

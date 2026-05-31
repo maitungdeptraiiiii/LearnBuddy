@@ -80,6 +80,39 @@ h2 {
   padding: 12px 14px;
 }
 
+.top-actions {
+  align-items: flex-end;
+  display: grid;
+  gap: 10px;
+  justify-items: end;
+}
+
+.view-switch {
+  background: #eef0ed;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  padding: 4px;
+}
+
+.view-switch button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 800;
+  padding: 9px 14px;
+}
+
+.view-switch button.active {
+  background: var(--panel);
+  color: var(--primary-dark);
+  box-shadow: 0 1px 3px rgba(20, 35, 31, 0.1);
+}
+
 .workspace {
   display: grid;
   gap: 18px;
@@ -403,6 +436,10 @@ button:disabled {
   padding: 12px;
 }
 
+.chat-log.full {
+  min-height: 420px;
+}
+
 .message {
   border-radius: 8px;
   line-height: 1.45;
@@ -510,6 +547,134 @@ button:disabled {
   padding: 11px 12px;
 }
 
+.chat-workspace {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 360px minmax(0, 1fr);
+  margin: 0 auto;
+  max-width: 1500px;
+}
+
+.chat-sidebar,
+.chat-main {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 18px;
+}
+
+.chat-main {
+  min-height: 720px;
+}
+
+.chat-topic-group {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.topic-button,
+.chat-lesson-list button {
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.topic-button {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.topic-button.active,
+.chat-lesson-list button.active {
+  background: var(--soft);
+}
+
+.topic-button strong {
+  line-height: 1.3;
+}
+
+.topic-button span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.chat-lesson-list {
+  display: grid;
+  gap: 6px;
+  padding-left: 10px;
+}
+
+.chat-lesson-list button {
+  align-items: center;
+  border: 1px solid transparent;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
+  padding: 9px 10px;
+}
+
+.chat-lesson-list button:hover {
+  border-color: var(--line);
+}
+
+.chat-lesson-list span {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.chat-lesson-list small {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--primary-dark);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 7px;
+}
+
+.chat-main-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.chat-main-header h2 {
+  font-size: 26px;
+  line-height: 1.2;
+}
+
+.chat-main-header p:not(.eyebrow) {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 8px 0 0;
+}
+
+.chat-context {
+  background: var(--soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.chat-context p {
+  color: var(--muted);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.chat-quick-support {
+  max-width: 520px;
+}
+
 .empty-state {
   align-items: center;
   background: var(--panel);
@@ -545,6 +710,10 @@ button:disabled {
   .tutor-panel {
     grid-column: 1 / -1;
   }
+
+  .chat-workspace {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 780px) {
@@ -553,7 +722,8 @@ button:disabled {
   }
 
   .topbar,
-  .plan-summary {
+  .plan-summary,
+  .chat-main-header {
     align-items: stretch;
     flex-direction: column;
   }
@@ -566,5 +736,17 @@ button:disabled {
 
   .paper-note {
     max-width: none;
+  }
+
+  .top-actions {
+    justify-items: stretch;
+  }
+
+  .view-switch {
+    width: 100%;
+  }
+
+  .chat-log.full {
+    min-height: 320px;
   }
 }
