@@ -29,6 +29,7 @@ type ChatTopic = {
   topic: string
   goal: string
   title: string
+  profile: LearnerProfile
   lessons: Lesson[]
 }
 
@@ -57,6 +58,7 @@ export default function Home() {
   )
   const messages = selectedChatLesson ? chatHistoryByLesson[selectedChatLesson.id] || [] : []
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
+  const savedTopicOptions = chatTopics.map((topic) => ({ id: topic.id, label: `${topic.topic} - ${topic.goal}` }))
 
   const progress = useMemo(() => {
     if (!plan) return 0
@@ -172,6 +174,14 @@ export default function Home() {
     await sendTutorQuestion(question)
   }
 
+  function applySavedTopic(topicId: string) {
+    const topic = chatTopics.find((item) => item.id === topicId)
+    if (!topic) return
+    setProfile(topic.profile)
+    setActiveChatTopicId(topic.id)
+    setActiveChatLessonId(topic.lessons[0]?.id || null)
+  }
+
   return (
     <main className="shell">
       <section className="topbar">
@@ -204,6 +214,21 @@ export default function Home() {
               Chủ đề
               <input value={profile.topic} onChange={(event) => setProfile({ ...profile, topic: event.target.value })} />
             </label>
+            {savedTopicOptions.length > 0 && (
+              <label>
+                Chủ đề đã tạo
+                <select defaultValue="" onChange={(event) => applySavedTopic(event.target.value)}>
+                  <option value="" disabled>
+                    Chọn lại chủ đề cũ
+                  </option>
+                  {savedTopicOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
 
             <label>
               Mục tiêu
@@ -280,8 +305,9 @@ export default function Home() {
                   <div className="foundation-box">
                     <div>
                       <strong>Kiến thức nền tảng cần có</strong>
-                      <span>Đề xuất {plan.recommendedWeeks} tuần học</span>
+                      <span>Bạn chọn {plan.profile.durationWeeks} tuần / gợi ý {plan.recommendedWeeks} tuần</span>
                     </div>
+                    <p>{plan.durationAdvice}</p>
                     <ul>
                       {plan.prerequisites.map((item) => (
                         <li key={item}>{item}</li>
@@ -500,6 +526,7 @@ function buildChatTopic(plan: LearningPlan): ChatTopic {
     topic: plan.profile.topic,
     goal: plan.profile.goal,
     title: plan.title,
+    profile: plan.profile,
     lessons: plan.lessons
   }
 }
@@ -516,15 +543,8 @@ function topicToPlan(topic: ChatTopic): LearningPlan {
     summary: topic.goal,
     prerequisites: [],
     recommendedWeeks: topic.lessons.length,
-    profile: {
-      topic: topic.topic,
-      goal: topic.goal,
-      level: 'mixed',
-      durationWeeks: topic.lessons.length,
-      hoursPerWeek: 5,
-      pace: 'normal',
-      learningStyle: 'mixed'
-    },
+    durationAdvice: '',
+    profile: topic.profile,
     lessons: topic.lessons
   }
 }

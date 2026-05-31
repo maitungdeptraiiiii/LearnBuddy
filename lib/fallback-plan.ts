@@ -38,8 +38,10 @@ export function estimateRecommendedWeeks(profile: LearnerProfile) {
 export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
   const topicProfile = analyzeTopic(profile.topic)
   const recommendedWeeks = estimateRecommendedWeeks(profile)
+  const selectedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || recommendedWeeks))
+  const durationAdvice = buildDurationAdvice(selectedWeeks, recommendedWeeks)
   const minutes = Math.max(45, Math.round(profile.hoursPerWeek * 60 * paceMultiplier[profile.pace]))
-  const phases = buildPhases(profile, recommendedWeeks, topicProfile)
+  const phases = buildPhases(profile, selectedWeeks, topicProfile)
 
   const lessons: Lesson[] = phases.map((phase, index) => ({
     id: `week-${index + 1}-${slugify(`${profile.topic}-${profile.goal}`).slice(0, 24)}`,
@@ -47,20 +49,33 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
     title: phase.title,
     objective: phase.objective,
     durationMinutes: minutes,
-    activities: buildActivities(profile, topicProfile, index, recommendedWeeks),
+    activities: buildActivities(profile, topicProfile, index, selectedWeeks, durationAdvice),
     checkpoint: phase.checkpoint,
     quiz: buildQuiz(profile, phase, index),
     status: 'todo'
   }))
 
   return {
-    title: `Lộ trình học ${profile.topic} trong ${recommendedWeeks} tuần`,
-    summary: `Đề xuất ${recommendedWeeks} tuần cho ${levelLabel[profile.level] || profile.level}, với ${profile.hoursPerWeek} giờ/tuần và mục tiêu: ${profile.goal}. Lộ trình bắt đầu từ kiến thức nền tảng, sau đó đi vào thực hành và sản phẩm cuối.`,
+    title: `Lộ trình học ${profile.topic} trong ${selectedWeeks} tuần`,
+    summary: `Bạn chọn ${selectedWeeks} tuần. Số tuần phù hợp hệ thống gợi ý là ${recommendedWeeks} tuần cho ${levelLabel[profile.level] || profile.level}, với ${profile.hoursPerWeek} giờ/tuần và mục tiêu: ${profile.goal}. ${durationAdvice}`,
     prerequisites: topicProfile.prerequisites,
     recommendedWeeks,
-    profile: { ...profile, durationWeeks: recommendedWeeks },
+    durationAdvice,
+    profile: { ...profile, durationWeeks: selectedWeeks },
     lessons
   }
+}
+
+function buildDurationAdvice(selectedWeeks: number, recommendedWeeks: number) {
+  if (selectedWeeks < recommendedWeeks) {
+    return `Vì thời lượng ngắn hơn gợi ý, nên học lướt các phần dễ/ít liên quan, ưu tiên nền tảng bắt buộc, phần khó và đầu ra cuối.`
+  }
+
+  if (selectedWeeks > recommendedWeeks) {
+    return `Vì thời lượng dài hơn gợi ý, nên học kỹ hơn các phần khó, thêm bài thực hành, tự kiểm tra và mở rộng project.`
+  }
+
+  return `Thời lượng này phù hợp, có thể học đều từ nền tảng đến thực hành mà không cần rút gọn mạnh.`
 }
 
 function analyzeTopic(topic: string): TopicProfile {
@@ -233,7 +248,7 @@ function phaseSequence(level: string, goalFocus: string, area: string): PhaseTem
   ]
 }
 
-function buildActivities(profile: LearnerProfile, topicProfile: TopicProfile, index: number, totalWeeks: number): string[] {
+function buildActivities(profile: LearnerProfile, topicProfile: TopicProfile, index: number, totalWeeks: number, durationAdvice: string): string[] {
   const topic = clean(profile.topic)
   const base =
     index === 0
@@ -245,10 +260,12 @@ function buildActivities(profile: LearnerProfile, topicProfile: TopicProfile, in
       ? `Hoàn thiện sản phẩm/bài nộp gắn với mục tiêu: ${clean(profile.goal)}`
       : `Tạo một đầu ra nhỏ có thể dùng lại cho mục tiêu: ${clean(profile.goal)}`
 
-  if (profile.learningStyle === 'practice') return [...base, 'Làm bài tập ngắn và tự sửa lỗi theo checkpoint', progressActivity]
-  if (profile.learningStyle === 'project') return [...base, progressActivity, 'Ghi lại quyết định triển khai và phần cần cải thiện']
-  if (profile.learningStyle === 'concepts') return [...base, 'Vẽ sơ đồ khái niệm và giải thích lại bằng ví dụ riêng', progressActivity]
-  return [...base, 'Xem ví dụ mẫu rồi làm lại theo cách của bạn', progressActivity]
+  const pacingActivity = durationAdvice.includes('ngắn hơn') ? 'Đánh dấu phần có thể học lướt và phần bắt buộc phải hiểu sâu' : 'Chọn một phần khó để đào sâu thêm bằng ví dụ hoặc bài tập mở rộng'
+
+  if (profile.learningStyle === 'practice') return [...base, 'Làm bài tập ngắn và tự sửa lỗi theo checkpoint', pacingActivity, progressActivity]
+  if (profile.learningStyle === 'project') return [...base, pacingActivity, progressActivity, 'Ghi lại quyết định triển khai và phần cần cải thiện']
+  if (profile.learningStyle === 'concepts') return [...base, 'Vẽ sơ đồ khái niệm và giải thích lại bằng ví dụ riêng', pacingActivity, progressActivity]
+  return [...base, 'Xem ví dụ mẫu rồi làm lại theo cách của bạn', pacingActivity, progressActivity]
 }
 
 function buildQuiz(profile: LearnerProfile, phase: PlanPhase, index: number): string[] {

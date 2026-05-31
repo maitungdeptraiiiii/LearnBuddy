@@ -277,6 +277,13 @@ button:disabled {
   padding: 6px 9px;
 }
 
+.foundation-box p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .progress-box {
   min-width: 140px;
 }

@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       {
         role: 'system',
         content:
-          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, or learningStyle changes. For every topic, identify prerequisite foundational knowledge the learner should have. Recommend a suitable number of weeks based on topic difficulty, learner level, goal, pace, and hours per week; you may increase the requested duration if it is too short. Use one lesson per week. Week 1 must cover prerequisite/foundation review. Do not repeat lesson titles, objectives, activities, checkpoints, or quizzes across weeks. Return strict JSON with title, summary, prerequisites, recommendedWeeks, and lessons. Each lesson must include id, week, title, objective, durationMinutes, activities, checkpoint, quiz, status.'
+          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, or learningStyle changes. For every topic, identify prerequisite foundational knowledge. Recommend a suitable number of weeks as recommendedWeeks, but returned lessons must follow the learner requested durationWeeks with one lesson per requested week. If requested durationWeeks is shorter than recommendedWeeks, include durationAdvice that suggests skimming easy/less important parts and prioritizing difficult/foundational parts. If requested durationWeeks is longer than recommendedWeeks, include durationAdvice that suggests studying difficult parts more deeply with extra practice. Week 1 must cover prerequisite/foundation review. Do not repeat lesson titles, objectives, activities, checkpoints, or quizzes across weeks. Return strict JSON with title, summary, prerequisites, recommendedWeeks, durationAdvice, and lessons. Each lesson must include id, week, title, objective, durationMinutes, activities, checkpoint, quiz, status.'
       },
       {
         role: 'user',
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     }
 
     const plan = normalizeLearningPlan(parsed, profile)
-    if (hasRepeatedLessons(plan) || hasInsufficientDuration(plan, profile)) {
+    if (hasRepeatedLessons(plan)) {
       return NextResponse.json({ plan: generateFallbackPlan(profile), mode: 'fallback-quality-guard' })
     }
 
@@ -32,11 +32,6 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ plan: generateFallbackPlan(profile), mode: 'fallback' })
   }
-}
-
-function hasInsufficientDuration(plan: LearningPlan, profile: LearnerProfile) {
-  const minimumWeeks = estimateRecommendedWeeks(profile)
-  return plan.recommendedWeeks < minimumWeeks || plan.lessons.length < minimumWeeks
 }
 
 function hasRepeatedLessons(plan: LearningPlan) {
@@ -57,14 +52,16 @@ function normalizeLearningPlan(parsed: unknown, profile: LearnerProfile): Learni
 
   if (lessons.length === 0) return generateFallbackPlan(profile)
 
-  const recommendedWeeks = normalizeRecommendedWeeks(raw.recommendedWeeks, lessons.length, profile)
+  const requestedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || lessons.length))
+  const recommendedWeeks = normalizeRecommendedWeeks(raw.recommendedWeeks, profile)
 
   return {
     title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : `Lộ trình học ${profile.topic}`,
     summary: typeof raw.summary === 'string' && raw.summary.trim() ? raw.summary : `Kế hoạch học cá nhân hóa cho mục tiêu: ${profile.goal}.`,
     prerequisites: normalizePrerequisites(raw.prerequisites),
     recommendedWeeks,
-    profile: { ...profile, durationWeeks: recommendedWeeks },
+    durationAdvice: normalizeDurationAdvice(raw.durationAdvice, requestedWeeks, recommendedWeeks),
+    profile: { ...profile, durationWeeks: requestedWeeks },
     lessons
   }
 }
@@ -74,10 +71,17 @@ function normalizePrerequisites(value: unknown) {
   return ['Kiến thức nhập môn của chủ đề', 'Thuật ngữ cơ bản', 'Kỹ năng tự học và ghi chú', 'Một mục tiêu thực hành nhỏ']
 }
 
-function normalizeRecommendedWeeks(value: unknown, lessonCount: number, profile: LearnerProfile) {
+function normalizeRecommendedWeeks(value: unknown, profile: LearnerProfile) {
   const parsed = Number(value)
-  if (Number.isFinite(parsed) && parsed > 0) return Math.max(lessonCount, Math.min(12, Math.round(parsed)))
-  return Math.max(lessonCount, profile.durationWeeks || lessonCount)
+  if (Number.isFinite(parsed) && parsed > 0) return Math.min(12, Math.max(1, Math.round(parsed)))
+  return estimateRecommendedWeeks(profile)
+}
+
+function normalizeDurationAdvice(value: unknown, selectedWeeks: number, recommendedWeeks: number) {
+  if (typeof value === 'string' && value.trim()) return value
+  if (selectedWeeks < recommendedWeeks) return 'Thời lượng ngắn hơn gợi ý: học lướt phần dễ/ít liên quan, ưu tiên nền tảng bắt buộc và phần khó.'
+  if (selectedWeeks > recommendedWeeks) return 'Thời lượng dài hơn gợi ý: học kỹ hơn phần khó, thêm bài tập mở rộng và tự kiểm tra.'
+  return 'Thời lượng phù hợp với gợi ý, có thể học đều từ nền tảng đến thực hành.'
 }
 
 function normalizeLesson(rawLesson: unknown, index: number, profile: LearnerProfile): Lesson {
