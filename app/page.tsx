@@ -58,7 +58,12 @@ export default function Home() {
   )
   const messages = selectedChatLesson ? chatHistoryByLesson[selectedChatLesson.id] || [] : []
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
-  const savedTopicOptions = chatTopics.map((topic) => ({ id: topic.id, label: `${topic.topic} - ${topic.goal}` }))
+  const savedTopicOptions = chatTopics
+    .filter((topic) => {
+      const query = profile.topic.trim().toLowerCase()
+      return query.length > 0 && topic.topic.toLowerCase().includes(query)
+    })
+    .slice(0, 4)
 
   const progress = useMemo(() => {
     if (!plan) return 0
@@ -174,9 +179,7 @@ export default function Home() {
     await sendTutorQuestion(question)
   }
 
-  function applySavedTopic(topicId: string) {
-    const topic = chatTopics.find((item) => item.id === topicId)
-    if (!topic) return
+  function applySavedTopic(topic: ChatTopic) {
     setProfile(topic.profile)
     setActiveChatTopicId(topic.id)
     setActiveChatLessonId(topic.lessons[0]?.id || null)
@@ -212,23 +215,20 @@ export default function Home() {
 
             <label>
               Chủ đề
-              <input value={profile.topic} onChange={(event) => setProfile({ ...profile, topic: event.target.value })} />
+              <div className="topic-combobox">
+                <input value={profile.topic} onChange={(event) => setProfile({ ...profile, topic: event.target.value })} />
+                {savedTopicOptions.length > 0 && (
+                  <div className="topic-suggestions">
+                    {savedTopicOptions.map((topic) => (
+                      <button key={topic.id} type="button" onClick={() => applySavedTopic(topic)}>
+                        <strong>{topic.topic}</strong>
+                        <span>{topic.goal}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </label>
-            {savedTopicOptions.length > 0 && (
-              <label>
-                Chủ đề đã tạo
-                <select defaultValue="" onChange={(event) => applySavedTopic(event.target.value)}>
-                  <option value="" disabled>
-                    Chọn lại chủ đề cũ
-                  </option>
-                  {savedTopicOptions.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
 
             <label>
               Mục tiêu
@@ -333,10 +333,11 @@ export default function Home() {
                     onClick={() => selectLesson(lesson.id)}
                     type="button"
                   >
-                    <div className="lesson-head">
-                      <span>Tuần {lesson.week}</span>
-                      <small>{statusLabel[lesson.status]}</small>
-                    </div>
+                  <div className="lesson-head">
+                    <span>Tuần {lesson.week}</span>
+                    <small>{statusLabel[lesson.status]}</small>
+                  </div>
+                    <div className={`pacing-badge ${lesson.pacing || 'normal'}`}>{pacingLabel(lesson.pacing)}</div>
                     <strong>{lesson.title}</strong>
                     <p>{lesson.objective}</p>
                     <div className="lesson-meta">
@@ -551,6 +552,12 @@ function topicToPlan(topic: ChatTopic): LearningPlan {
 
 function stableTopicId(profile: LearnerProfile) {
   return slugify(`${profile.topic}-${profile.goal}`)
+}
+
+function pacingLabel(pacing: Lesson['pacing']) {
+  if (pacing === 'skim') return 'Học nhanh'
+  if (pacing === 'deep') return 'Học kỹ'
+  return 'Bình thường'
 }
 
 function slugify(value: string) {

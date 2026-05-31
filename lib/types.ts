@@ -15,6 +15,7 @@ export interface LearnerProfile {
 export interface Lesson {
   id: string
   week: number
+  pacing?: 'skim' | 'deep' | 'normal'
   title: string
   objective: string
   durationMinutes: number

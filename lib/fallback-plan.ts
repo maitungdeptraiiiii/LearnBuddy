@@ -30,6 +30,8 @@ type PhaseTemplate = {
   checkpoint: (topic: string, goal: string, week: number) => string
 }
 
+type LessonPacing = 'skim' | 'deep' | 'normal'
+
 export function estimateRecommendedWeeks(profile: LearnerProfile) {
   const topicProfile = analyzeTopic(profile.topic)
   return recommendWeeks(profile, topicProfile)
@@ -46,6 +48,7 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
   const lessons: Lesson[] = phases.map((phase, index) => ({
     id: `week-${index + 1}-${slugify(`${profile.topic}-${profile.goal}`).slice(0, 24)}`,
     week: index + 1,
+    pacing: getLessonPacing(index, selectedWeeks, recommendedWeeks),
     title: phase.title,
     objective: phase.objective,
     durationMinutes: minutes,
@@ -64,6 +67,20 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
     profile: { ...profile, durationWeeks: selectedWeeks },
     lessons
   }
+}
+
+function getLessonPacing(index: number, selectedWeeks: number, recommendedWeeks: number): LessonPacing {
+  if (selectedWeeks < recommendedWeeks) {
+    if (index === 0 || index === selectedWeeks - 1) return 'deep'
+    return index % 2 === 0 ? 'deep' : 'skim'
+  }
+
+  if (selectedWeeks > recommendedWeeks) {
+    if (index === 0) return 'normal'
+    return index >= Math.max(1, selectedWeeks - 2) || index % 2 === 0 ? 'deep' : 'normal'
+  }
+
+  return index === 0 || index === selectedWeeks - 1 ? 'deep' : 'normal'
 }
 
 function buildDurationAdvice(selectedWeeks: number, recommendedWeeks: number) {

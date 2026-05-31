@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       {
         role: 'system',
         content:
-          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, or learningStyle changes. For every topic, identify prerequisite foundational knowledge. Recommend a suitable number of weeks as recommendedWeeks, but returned lessons must follow the learner requested durationWeeks with one lesson per requested week. If requested durationWeeks is shorter than recommendedWeeks, include durationAdvice that suggests skimming easy/less important parts and prioritizing difficult/foundational parts. If requested durationWeeks is longer than recommendedWeeks, include durationAdvice that suggests studying difficult parts more deeply with extra practice. Week 1 must cover prerequisite/foundation review. Do not repeat lesson titles, objectives, activities, checkpoints, or quizzes across weeks. Return strict JSON with title, summary, prerequisites, recommendedWeeks, durationAdvice, and lessons. Each lesson must include id, week, title, objective, durationMinutes, activities, checkpoint, quiz, status.'
+          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, or learningStyle changes. For every topic, identify prerequisite foundational knowledge. Recommend a suitable number of weeks as recommendedWeeks, but returned lessons must follow the learner requested durationWeeks with one lesson per requested week. If requested durationWeeks is shorter than recommendedWeeks, include durationAdvice that suggests skimming easy/less important parts and prioritizing difficult/foundational parts. If requested durationWeeks is longer than recommendedWeeks, include durationAdvice that suggests studying difficult parts more deeply with extra practice. Week 1 must cover prerequisite/foundation review. Do not repeat lesson titles, objectives, activities, checkpoints, or quizzes across weeks. Return strict JSON with title, summary, prerequisites, recommendedWeeks, durationAdvice, and lessons. Each lesson must include id, week, pacing, title, objective, durationMinutes, activities, checkpoint, quiz, status. pacing must be one of skim, deep, normal.'
       },
       {
         role: 'user',
@@ -91,6 +91,7 @@ function normalizeLesson(rawLesson: unknown, index: number, profile: LearnerProf
   return {
     id: typeof lesson.id === 'string' && lesson.id.trim() ? lesson.id : `lesson-${index + 1}`,
     week: Number.isFinite(Number(lesson.week)) && Number(lesson.week) > 0 ? Number(lesson.week) : index + 1,
+    pacing: normalizePacing(lesson.pacing, index, profile),
     title: typeof lesson.title === 'string' && lesson.title.trim() ? lesson.title : fallbackTitle,
     objective: typeof lesson.objective === 'string' && lesson.objective.trim() ? lesson.objective : `Nắm nội dung chính của ${fallbackTitle}.`,
     durationMinutes:
@@ -100,6 +101,15 @@ function normalizeLesson(rawLesson: unknown, index: number, profile: LearnerProf
     quiz: Array.isArray(lesson.quiz) && lesson.quiz.length > 0 ? lesson.quiz.map(String) : ['Bạn đã hiểu điểm quan trọng nhất nào?'],
     status: normalizeStatus(lesson.status)
   }
+}
+
+function normalizePacing(pacing: unknown, index: number, profile: LearnerProfile) {
+  if (pacing === 'skim' || pacing === 'deep' || pacing === 'normal') return pacing
+  const recommendedWeeks = estimateRecommendedWeeks(profile)
+  const selectedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || recommendedWeeks))
+  if (selectedWeeks < recommendedWeeks) return index === 0 || index === selectedWeeks - 1 ? 'deep' : index % 2 === 0 ? 'deep' : 'skim'
+  if (selectedWeeks > recommendedWeeks) return index >= Math.max(1, selectedWeeks - 2) || index % 2 === 0 ? 'deep' : 'normal'
+  return index === 0 || index === selectedWeeks - 1 ? 'deep' : 'normal'
 }
 
 function normalizeStatus(status: unknown): LessonStatus {
