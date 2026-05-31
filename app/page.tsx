@@ -60,8 +60,8 @@ export default function Home() {
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
   const savedTopicOptions = chatTopics
     .filter((topic) => {
-      const query = profile.topic.trim().toLowerCase()
-      return query.length > 0 && topic.topic.toLowerCase().includes(query)
+      const query = profile.topic.trim()
+      return shouldSuggestTopic(topic.topic, query)
     })
     .slice(0, 4)
 
@@ -552,6 +552,25 @@ function topicToPlan(topic: ChatTopic): LearningPlan {
 
 function stableTopicId(profile: LearnerProfile) {
   return slugify(`${profile.topic}-${profile.goal}`)
+}
+
+function shouldSuggestTopic(topic: string, query: string) {
+  const normalizedQuery = normalizeSearchText(query)
+  if (normalizedQuery.length < 2) return false
+
+  const normalizedTopic = normalizeSearchText(topic)
+  if (normalizedTopic.startsWith(normalizedQuery)) return true
+
+  return normalizedTopic.split(/\s+/).some((word) => word.startsWith(normalizedQuery))
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .trim()
 }
 
 function pacingLabel(pacing: Lesson['pacing']) {
