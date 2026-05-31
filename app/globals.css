@@ -360,6 +360,37 @@ button:disabled {
   opacity: 0.6;
 }
 
+.chat-history-heading {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.chat-history-heading h3 {
+  font-size: 15px;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.chat-history-heading p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 4px 0 0;
+}
+
+.chat-history-heading span {
+  background: var(--soft);
+  border-radius: 999px;
+  color: var(--primary-dark);
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 9px;
+}
+
 .chat-log {
   border: 1px solid var(--line);
   border-radius: 8px;

@@ -39,6 +39,7 @@ export default function Home() {
   )
 
   const messages = selectedLessonId ? chatHistoryByLesson[selectedLessonId] || [] : []
+  const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
 
   const progress = useMemo(() => {
     if (!plan) return 0
@@ -305,9 +306,17 @@ export default function Home() {
             <div className="empty-state compact">Chọn hoặc tạo một bài học để tutor có ngữ cảnh.</div>
           )}
 
+          <div className="chat-history-heading">
+            <div>
+              <h3>Lịch sử chat của bài học</h3>
+              <p>{selectedLesson ? selectedLesson.title : 'Chưa chọn bài học'}</p>
+            </div>
+            <span>{chatMessageCount} tin nhắn</span>
+          </div>
+
           <div className="chat-log">
             {messages.length === 0 ? (
-              <div className="empty-state compact">Hỏi tutor về bài học đang chọn.</div>
+              <div className="empty-state compact">Chưa có lịch sử chat cho bài học này.</div>
             ) : (
               messages.map((message) => (
                 <div key={message.id} className={`message ${message.role}`}>
@@ -338,6 +347,10 @@ export default function Home() {
       </section>
     </main>
   )
+}
+
+function isLessonSupportMessage(message: ChatMessage) {
+  return message.role === 'assistant' && message.content.startsWith('### Tutor đang theo bài:')
 }
 
 function buildLessonSupportMessage(lesson: Lesson): ChatMessage {
