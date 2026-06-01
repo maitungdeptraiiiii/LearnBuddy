@@ -556,7 +556,7 @@ function stableTopicId(profile: LearnerProfile) {
 
 function shouldSuggestTopic(topic: string, query: string) {
   const normalizedQuery = normalizeSearchText(query)
-  if (normalizedQuery.length < 2) return false
+  if (!normalizedQuery) return false
 
   const normalizedTopic = normalizeSearchText(topic)
   if (normalizedTopic.startsWith(normalizedQuery)) return true
