@@ -1,6 +1,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 
+RUN apk add --no-cache python3 && ln -sf python3 /usr/bin/python
+
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -20,12 +22,14 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
 
+RUN apk add --no-cache python3 && ln -sf python3 /usr/bin/python
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules/yt-dlp-exec/bin ./node_modules/yt-dlp-exec/bin
 
 USER nextjs
 

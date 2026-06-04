@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { estimateRecommendedWeeks, generateFallbackPlan } from '@/lib/fallback-plan'
-import type { LearnerProfile, LearningPlan, Lesson, LessonStatus } from '@/lib/types'
+import type { LearnerProfile, LearningPlan, Lesson, LessonStatus, PrerequisiteRelationship } from '@/lib/types'
 import { lawRagChatJson } from '@/lib/law-rag-llm'
 
 export async function POST(request: Request) {
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
       {
         role: 'system',
         content:
-          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, or learningStyle changes. For every topic, identify prerequisite foundational knowledge. Recommend a suitable number of weeks as recommendedWeeks, but returned lessons must follow the learner requested durationWeeks with one lesson per requested week. If requested durationWeeks is shorter than recommendedWeeks, include durationAdvice that suggests skimming easy/less important parts and prioritizing difficult/foundational parts. If requested durationWeeks is longer than recommendedWeeks, include durationAdvice that suggests studying difficult parts more deeply with extra practice. Week 1 must cover prerequisite/foundation review. Do not repeat lesson titles, objectives, activities, checkpoints, or quizzes across weeks. Return strict JSON with title, summary, prerequisites, recommendedWeeks, durationAdvice, and lessons. Each lesson must include id, week, pacing, title, objective, durationMinutes, activities, checkpoint, quiz, status. pacing must be one of skim, deep, normal.'
+          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, learningStyle, or learningTimePreference changes. For every topic, identify prerequisite foundational knowledge and prerequisiteGraph relationships. Recommend a suitable number of weeks as recommendedWeeks, but returned lessons must follow the learner requested durationWeeks with one lesson per requested week. If requested durationWeeks is shorter than recommendedWeeks, include durationAdvice that suggests skimming easy/less important parts and prioritizing difficult/foundational parts. If requested durationWeeks is longer than recommendedWeeks, include durationAdvice that suggests studying difficult parts more deeply with extra practice. Week 1 must cover prerequisite/foundation review. Do not repeat lesson titles, objectives, activities, homework, resources, checkpoints, or quizzes across weeks. Return strict JSON with title, summary, prerequisites, prerequisiteGraph, recommendedWeeks, durationAdvice, and lessons. prerequisiteGraph items must include from, to, reason. Each lesson must include id, week, pacing, title, objective, durationMinutes, activities, homework, resources, checkpoint, quiz, status. Do not include video suggestions or timestamp support; video retrieval is handled separately from a user-provided YouTube URL. pacing must be one of skim, deep, normal.'
       },
       {
         role: 'user',
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ plan: generateFallbackPlan(profile), mode: 'fallback' })
     }
 
-    const plan = normalizeLearningPlan(parsed, profile)
+    const plan = await normalizeLearningPlan(parsed, profile)
     if (hasRepeatedLessons(plan)) {
       return NextResponse.json({ plan: generateFallbackPlan(profile), mode: 'fallback-quality-guard' })
     }
@@ -44,11 +44,11 @@ function hasRepeatedLessons(plan: LearningPlan) {
   return false
 }
 
-function normalizeLearningPlan(parsed: unknown, profile: LearnerProfile): LearningPlan {
+async function normalizeLearningPlan(parsed: unknown, profile: LearnerProfile): Promise<LearningPlan> {
   if (!parsed || typeof parsed !== 'object') return generateFallbackPlan(profile)
 
   const raw = parsed as Partial<LearningPlan>
-  const lessons = Array.isArray(raw.lessons) ? raw.lessons.map((lesson, index) => normalizeLesson(lesson, index, profile)) : []
+  const lessons = Array.isArray(raw.lessons) ? await Promise.all(raw.lessons.map((lesson, index) => normalizeLesson(lesson, index, profile))) : []
 
   if (lessons.length === 0) return generateFallbackPlan(profile)
 
@@ -59,16 +59,66 @@ function normalizeLearningPlan(parsed: unknown, profile: LearnerProfile): Learni
     title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : `Lộ trình học ${profile.topic}`,
     summary: typeof raw.summary === 'string' && raw.summary.trim() ? raw.summary : `Kế hoạch học cá nhân hóa cho mục tiêu: ${profile.goal}.`,
     prerequisites: normalizePrerequisites(raw.prerequisites),
+    prerequisiteGraph: normalizePrerequisiteGraph(raw.prerequisiteGraph, normalizePrerequisites(raw.prerequisites), profile.topic),
     recommendedWeeks,
     durationAdvice: normalizeDurationAdvice(raw.durationAdvice, requestedWeeks, recommendedWeeks),
-    profile: { ...profile, durationWeeks: requestedWeeks },
+    profile: {
+      ...profile,
+      durationWeeks: requestedWeeks,
+      learningTimePreference: normalizeLearningTimePreference(profile.learningTimePreference),
+      videoLanguage: normalizeVideoLanguage(profile.videoLanguage)
+    },
     lessons
   }
+}
+
+function normalizeLearningTimePreference(value: unknown): LearnerProfile['learningTimePreference'] {
+  if (value === 'morning' || value === 'noon' || value === 'afternoon' || value === 'evening') return value
+  return 'evening'
+}
+
+function normalizeVideoLanguage(value: unknown): LearnerProfile['videoLanguage'] {
+  if (value === 'en' || value === 'vi') return value
+  return 'vi'
 }
 
 function normalizePrerequisites(value: unknown) {
   if (Array.isArray(value) && value.length > 0) return value.map(String).filter(Boolean)
   return ['Kiến thức nhập môn của chủ đề', 'Thuật ngữ cơ bản', 'Kỹ năng tự học và ghi chú', 'Một mục tiêu thực hành nhỏ']
+}
+
+function normalizeStringList(value: unknown, fallback: string[]) {
+  if (Array.isArray(value)) {
+    const normalized = value.map(String).map((item) => item.trim()).filter(Boolean)
+    if (normalized.length > 0) return normalized
+  }
+
+  return fallback
+}
+
+function normalizePrerequisiteGraph(value: unknown, prerequisites: string[], topic: string): PrerequisiteRelationship[] {
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null
+        const relationship = item as Partial<PrerequisiteRelationship>
+        if (!relationship.from || !relationship.to) return null
+        return {
+          from: String(relationship.from),
+          to: String(relationship.to),
+          reason: relationship.reason ? String(relationship.reason) : `Cần học "${relationship.from}" trước "${relationship.to}".`
+        }
+      })
+      .filter((item): item is PrerequisiteRelationship => Boolean(item))
+
+    if (normalized.length > 0) return normalized
+  }
+
+  return prerequisites.map((item, index) => ({
+    from: item,
+    to: index === prerequisites.length - 1 ? topic : prerequisites[index + 1],
+    reason: index === prerequisites.length - 1 ? `Cần nắm "${item}" trước khi học sâu vào ${topic}.` : `"${item}" giúp học "${prerequisites[index + 1]}" dễ hơn.`
+  }))
 }
 
 function normalizeRecommendedWeeks(value: unknown, profile: LearnerProfile) {
@@ -84,19 +134,22 @@ function normalizeDurationAdvice(value: unknown, selectedWeeks: number, recommen
   return 'Thời lượng phù hợp với gợi ý, có thể học đều từ nền tảng đến thực hành.'
 }
 
-function normalizeLesson(rawLesson: unknown, index: number, profile: LearnerProfile): Lesson {
+async function normalizeLesson(rawLesson: unknown, index: number, profile: LearnerProfile): Promise<Lesson> {
   const lesson = rawLesson && typeof rawLesson === 'object' ? (rawLesson as Partial<Lesson>) : {}
   const fallbackTitle = `Bài ${index + 1}: ${profile.topic}`
+  const title = typeof lesson.title === 'string' && lesson.title.trim() ? lesson.title : fallbackTitle
 
   return {
     id: typeof lesson.id === 'string' && lesson.id.trim() ? lesson.id : `lesson-${index + 1}`,
     week: Number.isFinite(Number(lesson.week)) && Number(lesson.week) > 0 ? Number(lesson.week) : index + 1,
     pacing: normalizePacing(lesson.pacing, index, profile),
-    title: typeof lesson.title === 'string' && lesson.title.trim() ? lesson.title : fallbackTitle,
+    title,
     objective: typeof lesson.objective === 'string' && lesson.objective.trim() ? lesson.objective : `Nắm nội dung chính của ${fallbackTitle}.`,
     durationMinutes:
       Number.isFinite(Number(lesson.durationMinutes)) && Number(lesson.durationMinutes) > 0 ? Number(lesson.durationMinutes) : Math.max(35, Math.round(profile.hoursPerWeek * 60)),
     activities: Array.isArray(lesson.activities) && lesson.activities.length > 0 ? lesson.activities.map(String) : [`Học nội dung chính về ${profile.topic}`, 'Làm bài tập ngắn'],
+    homework: normalizeStringList(lesson.homework, [`Tóm tắt bài ${index + 1} bằng lời của bạn`, `Làm một bài tập nhỏ về ${profile.topic}`]),
+    resources: normalizeStringList(lesson.resources, [`Tài liệu nhập môn về ${profile.topic}`, `Video/bài giảng liên quan đến ${fallbackTitle}`]),
     checkpoint: typeof lesson.checkpoint === 'string' && lesson.checkpoint.trim() ? lesson.checkpoint : `Giải thích được nội dung chính của ${fallbackTitle}.`,
     quiz: Array.isArray(lesson.quiz) && lesson.quiz.length > 0 ? lesson.quiz.map(String) : ['Bạn đã hiểu điểm quan trọng nhất nào?'],
     status: normalizeStatus(lesson.status)

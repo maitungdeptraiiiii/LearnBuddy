@@ -15,6 +15,14 @@ npm install
 npm run dev
 ```
 
+Tạo file `.env.local` nếu muốn enrich video YouTube bằng metadata thật:
+
+```powershell
+YOUTUBE_API_KEY=<youtube-data-api-key>
+```
+
+Khi có key, backend dùng YouTube Data API để lấy tên video, thời lượng và description, sau đó parse chapter/timestamp từ description nếu video có. Nếu chưa có key, app chỉ có thể lấy title công khai qua oEmbed và sẽ fallback cho duration/timestamp.
+
 Mở:
 
 ```text

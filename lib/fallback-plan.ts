@@ -1,4 +1,4 @@
-import type { LearnerProfile, LearningPlan, Lesson } from '@/lib/types'
+import type { LearnerProfile, LearningPlan, Lesson, PrerequisiteRelationship } from '@/lib/types'
 
 const paceMultiplier = {
   gentle: 0.85,
@@ -53,6 +53,8 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
     objective: phase.objective,
     durationMinutes: minutes,
     activities: buildActivities(profile, topicProfile, index, selectedWeeks, durationAdvice),
+    homework: buildHomework(profile, phase, index),
+    resources: buildResources(profile, topicProfile, phase, index),
     checkpoint: phase.checkpoint,
     quiz: buildQuiz(profile, phase, index),
     status: 'todo'
@@ -62,11 +64,17 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
     title: `Lộ trình học ${profile.topic} trong ${selectedWeeks} tuần`,
     summary: `Bạn chọn ${selectedWeeks} tuần. Số tuần phù hợp hệ thống gợi ý là ${recommendedWeeks} tuần cho ${levelLabel[profile.level] || profile.level}, với ${profile.hoursPerWeek} giờ/tuần và mục tiêu: ${profile.goal}. ${durationAdvice}`,
     prerequisites: topicProfile.prerequisites,
+    prerequisiteGraph: buildPrerequisiteGraph(topicProfile.prerequisites, profile.topic),
     recommendedWeeks,
     durationAdvice,
-    profile: { ...profile, durationWeeks: selectedWeeks },
+    profile: { ...profile, durationWeeks: selectedWeeks, videoLanguage: normalizeVideoLanguage(profile.videoLanguage) },
     lessons
   }
+}
+
+function normalizeVideoLanguage(value: unknown): LearnerProfile['videoLanguage'] {
+  if (value === 'en' || value === 'vi') return value
+  return 'vi'
 }
 
 function getLessonPacing(index: number, selectedWeeks: number, recommendedWeeks: number): LessonPacing {
@@ -93,6 +101,14 @@ function buildDurationAdvice(selectedWeeks: number, recommendedWeeks: number) {
   }
 
   return `Thời lượng này phù hợp, có thể học đều từ nền tảng đến thực hành mà không cần rút gọn mạnh.`
+}
+
+function buildPrerequisiteGraph(prerequisites: string[], topic: string): PrerequisiteRelationship[] {
+  return prerequisites.map((item, index) => ({
+    from: item,
+    to: index === prerequisites.length - 1 ? clean(topic) : prerequisites[index + 1],
+    reason: index === prerequisites.length - 1 ? `Cần nắm "${item}" trước khi học sâu vào ${clean(topic)}.` : `"${item}" giúp học "${prerequisites[index + 1]}" dễ hơn.`
+  }))
 }
 
 function analyzeTopic(topic: string): TopicProfile {
@@ -283,6 +299,30 @@ function buildActivities(profile: LearnerProfile, topicProfile: TopicProfile, in
   if (profile.learningStyle === 'project') return [...base, pacingActivity, progressActivity, 'Ghi lại quyết định triển khai và phần cần cải thiện']
   if (profile.learningStyle === 'concepts') return [...base, 'Vẽ sơ đồ khái niệm và giải thích lại bằng ví dụ riêng', pacingActivity, progressActivity]
   return [...base, 'Xem ví dụ mẫu rồi làm lại theo cách của bạn', pacingActivity, progressActivity]
+}
+
+function buildHomework(profile: LearnerProfile, phase: PlanPhase, index: number): string[] {
+  return [
+    `Viết lại 5 ý chính của "${phase.title}" bằng lời của bạn.`,
+    `Làm một bài tập nhỏ gắn với mục tiêu: ${clean(profile.goal)}.`,
+    `Nộp 1 câu hỏi còn vướng để tutor kiểm tra mức độ hiểu bài.`
+  ]
+}
+
+function buildResources(profile: LearnerProfile, topicProfile: TopicProfile, phase: PlanPhase, index: number): string[] {
+  const topic = clean(profile.topic)
+  const foundation = topicProfile.prerequisites[index % topicProfile.prerequisites.length]
+  const khanUrl = buildKhanAcademyUrl(`${topic} ${phase.title} ${foundation}`)
+  return [
+    `Khan Academy - xem bai lien quan: ${khanUrl}`,
+    `Tài liệu nhập môn về ${topic}: đọc phần khái niệm và ví dụ cơ bản.`,
+    `Video/bài giảng liên quan đến "${phase.title}": ưu tiên đoạn giải thích ${foundation}.`,
+    `Checklist tự học: khái niệm, ví dụ, lỗi thường gặp, câu hỏi kiểm tra.`
+  ]
+}
+
+function buildKhanAcademyUrl(query: string) {
+  return `https://www.khanacademy.org/search?page_search_query=${encodeURIComponent(query)}`
 }
 
 function buildQuiz(profile: LearnerProfile, phase: PlanPhase, index: number): string[] {
