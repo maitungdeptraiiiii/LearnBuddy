@@ -1,0 +1,3866 @@
+{
+  "version": "1.0.0",
+  "project": {
+    "name": "LearnBuddy",
+    "languages": [
+      "TypeScript",
+      "CSS",
+      "JavaScript",
+      "JSON",
+      "Markdown",
+      "Dockerfile"
+    ],
+    "frameworks": [
+      "Next.js",
+      "React",
+      "TypeScript",
+      "Docker"
+    ],
+    "description": "LLM-powered personalized learning planner and AI tutor demo with lesson scheduling and YouTube transcript support.",
+    "analyzedAt": "2026-06-04T04:21:19.449Z",
+    "gitCommitHash": "682114df94f262523e55adc1bc1a2f8b60030668"
+  },
+  "nodes": [
+    {
+      "tags": [
+        "unknown",
+        "infra"
+      ],
+      "id": "service:.dockerignore",
+      "type": "service",
+      "name": ".dockerignore",
+      "filePath": ".dockerignore",
+      "summary": "Docker build exclusion rules that keep local dependencies, logs, and transient files out of the container context."
+    },
+    {
+      "tags": [
+        "config",
+        "config"
+      ],
+      "id": "config:.env.example",
+      "type": "config",
+      "name": ".env.example",
+      "filePath": ".env.example",
+      "summary": "Example environment file showing optional configuration variables for local and containerized runs."
+    },
+    {
+      "tags": [
+        "unknown",
+        "code"
+      ],
+      "id": "config:.understand-anything/.understandignore",
+      "type": "config",
+      "name": ".understand-anything/.understandignore",
+      "filePath": ".understand-anything/.understandignore",
+      "summary": "Understand Anything ignore configuration with suggested patterns for future graph scans."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:app/api/plan/route.ts",
+      "type": "file",
+      "name": "app/api/plan/route.ts",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Next.js API route that generates a personalized learning plan with Law-RAG LLM JSON output and deterministic fallback quality guards."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:app/api/tutor/route.ts",
+      "type": "file",
+      "name": "app/api/tutor/route.ts",
+      "filePath": "app/api/tutor/route.ts",
+      "summary": "Next.js API route that answers lesson-scoped tutor questions using the Law-RAG chat runtime with a local fallback response."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:app/api/videos/analyze/route.ts",
+      "type": "file",
+      "name": "app/api/videos/analyze/route.ts",
+      "filePath": "app/api/videos/analyze/route.ts",
+      "summary": "Next.js API route that analyzes a supplied YouTube URL against the current lesson list and returns transcript segment matches."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:app/api/videos/suggest-shared/route.ts",
+      "type": "file",
+      "name": "app/api/videos/suggest-shared/route.ts",
+      "filePath": "app/api/videos/suggest-shared/route.ts",
+      "summary": "Next.js API route that asks the video service for a plan-wide YouTube recommendation."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:app/api/videos/suggest/route.ts",
+      "type": "file",
+      "name": "app/api/videos/suggest/route.ts",
+      "filePath": "app/api/videos/suggest/route.ts",
+      "summary": "Next.js API route that recommends a YouTube video for the active lesson or plan context."
+    },
+    {
+      "tags": [
+        "css",
+        "markup"
+      ],
+      "id": "file:app/globals.css",
+      "type": "file",
+      "name": "app/globals.css",
+      "filePath": "app/globals.css",
+      "summary": "Global stylesheet defining the LearnBuddy layout, panels, plan workspace, schedule view, video workspace, chat UI, and responsive behavior."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:app/layout.tsx",
+      "type": "file",
+      "name": "app/layout.tsx",
+      "filePath": "app/layout.tsx",
+      "summary": "Root Next.js layout that registers application metadata, imports global styles, and wraps all routes."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:app/page.tsx",
+      "type": "file",
+      "name": "app/page.tsx",
+      "filePath": "app/page.tsx",
+      "summary": "Main client-side LearnBuddy experience for profile input, plan generation, lesson progress, scheduling, video analysis, saved plans, and tutor chat."
+    },
+    {
+      "tags": [
+        "dockerfile",
+        "infra"
+      ],
+      "id": "service:Dockerfile",
+      "type": "service",
+      "name": "Dockerfile",
+      "filePath": "Dockerfile",
+      "summary": "Multi-stage Docker build that installs dependencies, builds the Next.js app, and runs the production server on port 3000."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:lib/fallback-plan.ts",
+      "type": "file",
+      "name": "lib/fallback-plan.ts",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Deterministic learning plan generator that estimates duration, prerequisites, phases, activities, resources, homework, checkpoints, and quizzes."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:lib/law-rag-llm.ts",
+      "type": "file",
+      "name": "lib/law-rag-llm.ts",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Runtime bridge to a Law-RAG OpenAI-compatible chat service, including env loading and JSON parsing helpers."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:lib/types.ts",
+      "type": "file",
+      "name": "lib/types.ts",
+      "filePath": "lib/types.ts",
+      "summary": "Shared TypeScript domain model for learner profiles, plans, lessons, chat messages, video indices, transcript segments, and recommendations."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:lib/video-index.ts",
+      "type": "file",
+      "name": "lib/video-index.ts",
+      "filePath": "lib/video-index.ts",
+      "summary": "YouTube retrieval and indexing service that suggests videos, extracts transcripts, chunks and titles segments, embeds text, and matches segments to lessons."
+    },
+    {
+      "tags": [
+        "typescript",
+        "code"
+      ],
+      "id": "file:next-env.d.ts",
+      "type": "file",
+      "name": "next-env.d.ts",
+      "filePath": "next-env.d.ts",
+      "summary": "Next.js generated TypeScript declarations for framework types."
+    },
+    {
+      "tags": [
+        "javascript",
+        "code"
+      ],
+      "id": "config:next.config.mjs",
+      "type": "config",
+      "name": "next.config.mjs",
+      "filePath": "next.config.mjs",
+      "summary": "Next.js configuration enabling the app build and runtime defaults."
+    },
+    {
+      "tags": [
+        "json",
+        "config"
+      ],
+      "id": "config:package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "package.json",
+      "summary": "NPM manifest declaring LearnBuddy scripts and dependencies such as Next.js, React, lucide-react, and yt-dlp-exec."
+    },
+    {
+      "tags": [
+        "unknown",
+        "code"
+      ],
+      "id": "file:public/.gitkeep",
+      "type": "file",
+      "name": "public/.gitkeep",
+      "filePath": "public/.gitkeep",
+      "summary": "Placeholder that preserves the public assets directory in source control."
+    },
+    {
+      "tags": [
+        "markdown",
+        "docs"
+      ],
+      "id": "document:README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "README.md",
+      "summary": "Vietnamese project overview, local run instructions, Docker deployment commands, and roadmap ideas."
+    },
+    {
+      "tags": [
+        "json",
+        "config"
+      ],
+      "id": "config:tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "tsconfig.json",
+      "summary": "TypeScript compiler configuration for the Next.js application and path alias support."
+    },
+    {
+      "tags": [
+        "dependency"
+      ],
+      "id": "module:next/server",
+      "type": "module",
+      "name": "next/server",
+      "summary": "Next.js server helpers for JSON route responses."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:POST",
+      "type": "function",
+      "name": "POST",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function POST in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:hasRepeatedLessons",
+      "type": "function",
+      "name": "hasRepeatedLessons",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function hasRepeatedLessons in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeLearningPlan",
+      "type": "function",
+      "name": "normalizeLearningPlan",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeLearningPlan in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeLearningTimePreference",
+      "type": "function",
+      "name": "normalizeLearningTimePreference",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeLearningTimePreference in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeVideoLanguage",
+      "type": "function",
+      "name": "normalizeVideoLanguage",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeVideoLanguage in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizePrerequisites",
+      "type": "function",
+      "name": "normalizePrerequisites",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizePrerequisites in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeStringList",
+      "type": "function",
+      "name": "normalizeStringList",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeStringList in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizePrerequisiteGraph",
+      "type": "function",
+      "name": "normalizePrerequisiteGraph",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizePrerequisiteGraph in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeRecommendedWeeks",
+      "type": "function",
+      "name": "normalizeRecommendedWeeks",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeRecommendedWeeks in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeDurationAdvice",
+      "type": "function",
+      "name": "normalizeDurationAdvice",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeDurationAdvice in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeLesson",
+      "type": "function",
+      "name": "normalizeLesson",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeLesson in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizePacing",
+      "type": "function",
+      "name": "normalizePacing",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizePacing in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/plan/route.ts:normalizeStatus",
+      "type": "function",
+      "name": "normalizeStatus",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Function normalizeStatus in app/api/plan/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/tutor/route.ts:POST",
+      "type": "function",
+      "name": "POST",
+      "filePath": "app/api/tutor/route.ts",
+      "summary": "Function POST in app/api/tutor/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/tutor/route.ts:fallbackTutorAnswer",
+      "type": "function",
+      "name": "fallbackTutorAnswer",
+      "filePath": "app/api/tutor/route.ts",
+      "summary": "Function fallbackTutorAnswer in app/api/tutor/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/videos/analyze/route.ts:POST",
+      "type": "function",
+      "name": "POST",
+      "filePath": "app/api/videos/analyze/route.ts",
+      "summary": "Function POST in app/api/videos/analyze/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/videos/suggest-shared/route.ts:POST",
+      "type": "function",
+      "name": "POST",
+      "filePath": "app/api/videos/suggest-shared/route.ts",
+      "summary": "Function POST in app/api/videos/suggest-shared/route.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/api/videos/suggest/route.ts:POST",
+      "type": "function",
+      "name": "POST",
+      "filePath": "app/api/videos/suggest/route.ts",
+      "summary": "Function POST in app/api/videos/suggest/route.ts."
+    },
+    {
+      "tags": [
+        "dependency"
+      ],
+      "id": "module:next",
+      "type": "module",
+      "name": "next",
+      "summary": "Next.js framework types and metadata support."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/layout.tsx:RootLayout",
+      "type": "function",
+      "name": "RootLayout",
+      "filePath": "app/layout.tsx",
+      "summary": "Function RootLayout in app/layout.tsx."
+    },
+    {
+      "tags": [
+        "dependency"
+      ],
+      "id": "module:react",
+      "type": "module",
+      "name": "react",
+      "summary": "React runtime and hooks used by the client application."
+    },
+    {
+      "tags": [
+        "dependency"
+      ],
+      "id": "module:lucide-react",
+      "type": "module",
+      "name": "lucide-react",
+      "summary": "Icon component library used in the application interface."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:Home",
+      "type": "function",
+      "name": "Home",
+      "filePath": "app/page.tsx",
+      "summary": "Function Home in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:generatePlan",
+      "type": "function",
+      "name": "generatePlan",
+      "filePath": "app/page.tsx",
+      "summary": "Function generatePlan in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:selectLesson",
+      "type": "function",
+      "name": "selectLesson",
+      "filePath": "app/page.tsx",
+      "summary": "Function selectLesson in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:updateLessonStatus",
+      "type": "function",
+      "name": "updateLessonStatus",
+      "filePath": "app/page.tsx",
+      "summary": "Function updateLessonStatus in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:ensureLessonChat",
+      "type": "function",
+      "name": "ensureLessonChat",
+      "filePath": "app/page.tsx",
+      "summary": "Function ensureLessonChat in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:openChatForLesson",
+      "type": "function",
+      "name": "openChatForLesson",
+      "filePath": "app/page.tsx",
+      "summary": "Function openChatForLesson in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:selectChatLesson",
+      "type": "function",
+      "name": "selectChatLesson",
+      "filePath": "app/page.tsx",
+      "summary": "Function selectChatLesson in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:sendTutorQuestion",
+      "type": "function",
+      "name": "sendTutorQuestion",
+      "filePath": "app/page.tsx",
+      "summary": "Function sendTutorQuestion in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:clearCurrentChat",
+      "type": "function",
+      "name": "clearCurrentChat",
+      "filePath": "app/page.tsx",
+      "summary": "Function clearCurrentChat in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:askTutor",
+      "type": "function",
+      "name": "askTutor",
+      "filePath": "app/page.tsx",
+      "summary": "Function askTutor in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:analyzeVideo",
+      "type": "function",
+      "name": "analyzeVideo",
+      "filePath": "app/page.tsx",
+      "summary": "Function analyzeVideo in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:analyzeVideoUrl",
+      "type": "function",
+      "name": "analyzeVideoUrl",
+      "filePath": "app/page.tsx",
+      "summary": "Function analyzeVideoUrl in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:suggestAndAnalyzeVideo",
+      "type": "function",
+      "name": "suggestAndAnalyzeVideo",
+      "filePath": "app/page.tsx",
+      "summary": "Function suggestAndAnalyzeVideo in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:suggestAndAnalyzeAllVideos",
+      "type": "function",
+      "name": "suggestAndAnalyzeAllVideos",
+      "filePath": "app/page.tsx",
+      "summary": "Function suggestAndAnalyzeAllVideos in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:suggestAndAnalyzeSharedVideo",
+      "type": "function",
+      "name": "suggestAndAnalyzeSharedVideo",
+      "filePath": "app/page.tsx",
+      "summary": "Function suggestAndAnalyzeSharedVideo in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:addLessonToSchedule",
+      "type": "function",
+      "name": "addLessonToSchedule",
+      "filePath": "app/page.tsx",
+      "summary": "Function addLessonToSchedule in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:moveScheduleEvent",
+      "type": "function",
+      "name": "moveScheduleEvent",
+      "filePath": "app/page.tsx",
+      "summary": "Function moveScheduleEvent in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:removeScheduleEvent",
+      "type": "function",
+      "name": "removeScheduleEvent",
+      "filePath": "app/page.tsx",
+      "summary": "Function removeScheduleEvent in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:handleDropSchedule",
+      "type": "function",
+      "name": "handleDropSchedule",
+      "filePath": "app/page.tsx",
+      "summary": "Function handleDropSchedule in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:applySavedTopic",
+      "type": "function",
+      "name": "applySavedTopic",
+      "filePath": "app/page.tsx",
+      "summary": "Function applySavedTopic in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:clearVideoStateForPlan",
+      "type": "function",
+      "name": "clearVideoStateForPlan",
+      "filePath": "app/page.tsx",
+      "summary": "Function clearVideoStateForPlan in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:deleteSavedPlan",
+      "type": "function",
+      "name": "deleteSavedPlan",
+      "filePath": "app/page.tsx",
+      "summary": "Function deleteSavedPlan in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:applySavedPlan",
+      "type": "function",
+      "name": "applySavedPlan",
+      "filePath": "app/page.tsx",
+      "summary": "Function applySavedPlan in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:buildChatTopic",
+      "type": "function",
+      "name": "buildChatTopic",
+      "filePath": "app/page.tsx",
+      "summary": "Function buildChatTopic in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:upsertChatTopic",
+      "type": "function",
+      "name": "upsertChatTopic",
+      "filePath": "app/page.tsx",
+      "summary": "Function upsertChatTopic in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:topicToPlan",
+      "type": "function",
+      "name": "topicToPlan",
+      "filePath": "app/page.tsx",
+      "summary": "Function topicToPlan in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:upsertSavedPlan",
+      "type": "function",
+      "name": "upsertSavedPlan",
+      "filePath": "app/page.tsx",
+      "summary": "Function upsertSavedPlan in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:omitRecordKey",
+      "type": "function",
+      "name": "omitRecordKey",
+      "filePath": "app/page.tsx",
+      "summary": "Function omitRecordKey in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:filterRecordByKeys",
+      "type": "function",
+      "name": "filterRecordByKeys",
+      "filePath": "app/page.tsx",
+      "summary": "Function filterRecordByKeys in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:legacyLessonMap",
+      "type": "function",
+      "name": "legacyLessonMap",
+      "filePath": "app/page.tsx",
+      "summary": "Function legacyLessonMap in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:planStorageId",
+      "type": "function",
+      "name": "planStorageId",
+      "filePath": "app/page.tsx",
+      "summary": "Function planStorageId in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:videoJobKey",
+      "type": "function",
+      "name": "videoJobKey",
+      "filePath": "app/page.tsx",
+      "summary": "Function videoJobKey in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:normalizeLoadedPlan",
+      "type": "function",
+      "name": "normalizeLoadedPlan",
+      "filePath": "app/page.tsx",
+      "summary": "Function normalizeLoadedPlan in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:isLearningPlanLike",
+      "type": "function",
+      "name": "isLearningPlanLike",
+      "filePath": "app/page.tsx",
+      "summary": "Function isLearningPlanLike in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:normalizeLoadedProfile",
+      "type": "function",
+      "name": "normalizeLoadedProfile",
+      "filePath": "app/page.tsx",
+      "summary": "Function normalizeLoadedProfile in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:normalizeLessonList",
+      "type": "function",
+      "name": "normalizeLessonList",
+      "filePath": "app/page.tsx",
+      "summary": "Function normalizeLessonList in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:buildInitialSchedule",
+      "type": "function",
+      "name": "buildInitialSchedule",
+      "filePath": "app/page.tsx",
+      "summary": "Function buildInitialSchedule in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:addMinutesToTime",
+      "type": "function",
+      "name": "addMinutesToTime",
+      "filePath": "app/page.tsx",
+      "summary": "Function addMinutesToTime in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:secondsToTimestamp",
+      "type": "function",
+      "name": "secondsToTimestamp",
+      "filePath": "app/page.tsx",
+      "summary": "Function secondsToTimestamp in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:selectDistinctVideoMatches",
+      "type": "function",
+      "name": "selectDistinctVideoMatches",
+      "filePath": "app/page.tsx",
+      "summary": "Function selectDistinctVideoMatches in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:stableTopicId",
+      "type": "function",
+      "name": "stableTopicId",
+      "filePath": "app/page.tsx",
+      "summary": "Function stableTopicId in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:shouldSuggestTopic",
+      "type": "function",
+      "name": "shouldSuggestTopic",
+      "filePath": "app/page.tsx",
+      "summary": "Function shouldSuggestTopic in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:normalizeSearchText",
+      "type": "function",
+      "name": "normalizeSearchText",
+      "filePath": "app/page.tsx",
+      "summary": "Function normalizeSearchText in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:pacingLabel",
+      "type": "function",
+      "name": "pacingLabel",
+      "filePath": "app/page.tsx",
+      "summary": "Function pacingLabel in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:slugify",
+      "type": "function",
+      "name": "slugify",
+      "filePath": "app/page.tsx",
+      "summary": "Function slugify in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:isLessonSupportMessage",
+      "type": "function",
+      "name": "isLessonSupportMessage",
+      "filePath": "app/page.tsx",
+      "summary": "Function isLessonSupportMessage in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:buildLessonSupportMessage",
+      "type": "function",
+      "name": "buildLessonSupportMessage",
+      "filePath": "app/page.tsx",
+      "summary": "Function buildLessonSupportMessage in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:AssetList",
+      "type": "function",
+      "name": "AssetList",
+      "filePath": "app/page.tsx",
+      "summary": "Function AssetList in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:formatAssetItem",
+      "type": "function",
+      "name": "formatAssetItem",
+      "filePath": "app/page.tsx",
+      "summary": "Function formatAssetItem in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:formatStringAssetItem",
+      "type": "function",
+      "name": "formatStringAssetItem",
+      "filePath": "app/page.tsx",
+      "summary": "Function formatStringAssetItem in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:firstString",
+      "type": "function",
+      "name": "firstString",
+      "filePath": "app/page.tsx",
+      "summary": "Function firstString in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:AssistantMessage",
+      "type": "function",
+      "name": "AssistantMessage",
+      "filePath": "app/page.tsx",
+      "summary": "Function AssistantMessage in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:parseMessageBlocks",
+      "type": "function",
+      "name": "parseMessageBlocks",
+      "filePath": "app/page.tsx",
+      "summary": "Function parseMessageBlocks in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:normalizeAssistantContent",
+      "type": "function",
+      "name": "normalizeAssistantContent",
+      "filePath": "app/page.tsx",
+      "summary": "Function normalizeAssistantContent in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:cleanAssistantLine",
+      "type": "function",
+      "name": "cleanAssistantLine",
+      "filePath": "app/page.tsx",
+      "summary": "Function cleanAssistantLine in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:app/page.tsx:renderInlineMarkdown",
+      "type": "function",
+      "name": "renderInlineMarkdown",
+      "filePath": "app/page.tsx",
+      "summary": "Function renderInlineMarkdown in app/page.tsx."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:app/page.tsx:AppView",
+      "type": "class",
+      "name": "AppView",
+      "filePath": "app/page.tsx",
+      "summary": "TypeScript domain shape AppView declared in app/page.tsx."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:app/page.tsx:ChatHistoryByLesson",
+      "type": "class",
+      "name": "ChatHistoryByLesson",
+      "filePath": "app/page.tsx",
+      "summary": "TypeScript domain shape ChatHistoryByLesson declared in app/page.tsx."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:app/page.tsx:ScheduleEvent",
+      "type": "class",
+      "name": "ScheduleEvent",
+      "filePath": "app/page.tsx",
+      "summary": "TypeScript domain shape ScheduleEvent declared in app/page.tsx."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:app/page.tsx:ChatTopic",
+      "type": "class",
+      "name": "ChatTopic",
+      "filePath": "app/page.tsx",
+      "summary": "TypeScript domain shape ChatTopic declared in app/page.tsx."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:app/page.tsx:PersistedAppState",
+      "type": "class",
+      "name": "PersistedAppState",
+      "filePath": "app/page.tsx",
+      "summary": "TypeScript domain shape PersistedAppState declared in app/page.tsx."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:app/page.tsx:FormattedAssetItem",
+      "type": "class",
+      "name": "FormattedAssetItem",
+      "filePath": "app/page.tsx",
+      "summary": "TypeScript domain shape FormattedAssetItem declared in app/page.tsx."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:app/page.tsx:MessageBlock",
+      "type": "class",
+      "name": "MessageBlock",
+      "filePath": "app/page.tsx",
+      "summary": "TypeScript domain shape MessageBlock declared in app/page.tsx."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:estimateRecommendedWeeks",
+      "type": "function",
+      "name": "estimateRecommendedWeeks",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function estimateRecommendedWeeks in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:generateFallbackPlan",
+      "type": "function",
+      "name": "generateFallbackPlan",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function generateFallbackPlan in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:normalizeVideoLanguage",
+      "type": "function",
+      "name": "normalizeVideoLanguage",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function normalizeVideoLanguage in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:getLessonPacing",
+      "type": "function",
+      "name": "getLessonPacing",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function getLessonPacing in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildDurationAdvice",
+      "type": "function",
+      "name": "buildDurationAdvice",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildDurationAdvice in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildPrerequisiteGraph",
+      "type": "function",
+      "name": "buildPrerequisiteGraph",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildPrerequisiteGraph in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:analyzeTopic",
+      "type": "function",
+      "name": "analyzeTopic",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function analyzeTopic in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:recommendWeeks",
+      "type": "function",
+      "name": "recommendWeeks",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function recommendWeeks in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildPhases",
+      "type": "function",
+      "name": "buildPhases",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildPhases in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:phaseSequence",
+      "type": "function",
+      "name": "phaseSequence",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function phaseSequence in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildActivities",
+      "type": "function",
+      "name": "buildActivities",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildActivities in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildHomework",
+      "type": "function",
+      "name": "buildHomework",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildHomework in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildResources",
+      "type": "function",
+      "name": "buildResources",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildResources in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildKhanAcademyUrl",
+      "type": "function",
+      "name": "buildKhanAcademyUrl",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildKhanAcademyUrl in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:buildQuiz",
+      "type": "function",
+      "name": "buildQuiz",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function buildQuiz in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:detectGoalFocus",
+      "type": "function",
+      "name": "detectGoalFocus",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function detectGoalFocus in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:isAmbitiousGoal",
+      "type": "function",
+      "name": "isAmbitiousGoal",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function isAmbitiousGoal in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:includesAny",
+      "type": "function",
+      "name": "includesAny",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function includesAny in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:clean",
+      "type": "function",
+      "name": "clean",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function clean in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/fallback-plan.ts:slugify",
+      "type": "function",
+      "name": "slugify",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "Function slugify in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/fallback-plan.ts:PlanPhase",
+      "type": "class",
+      "name": "PlanPhase",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "TypeScript domain shape PlanPhase declared in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/fallback-plan.ts:TopicProfile",
+      "type": "class",
+      "name": "TopicProfile",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "TypeScript domain shape TopicProfile declared in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/fallback-plan.ts:PhaseTemplate",
+      "type": "class",
+      "name": "PhaseTemplate",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "TypeScript domain shape PhaseTemplate declared in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/fallback-plan.ts:LessonPacing",
+      "type": "class",
+      "name": "LessonPacing",
+      "filePath": "lib/fallback-plan.ts",
+      "summary": "TypeScript domain shape LessonPacing declared in lib/fallback-plan.ts."
+    },
+    {
+      "tags": [
+        "dependency"
+      ],
+      "id": "module:node:fs",
+      "type": "module",
+      "name": "node:fs",
+      "summary": "Node.js standard library module."
+    },
+    {
+      "tags": [
+        "dependency"
+      ],
+      "id": "module:node:path",
+      "type": "module",
+      "name": "node:path",
+      "summary": "Node.js standard library module."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/law-rag-llm.ts:getLawRagRuntime",
+      "type": "function",
+      "name": "getLawRagRuntime",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Function getLawRagRuntime in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/law-rag-llm.ts:lawRagChatText",
+      "type": "function",
+      "name": "lawRagChatText",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Function lawRagChatText in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/law-rag-llm.ts:lawRagChatJson",
+      "type": "function",
+      "name": "lawRagChatJson",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Function lawRagChatJson in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/law-rag-llm.ts:chatCompletions",
+      "type": "function",
+      "name": "chatCompletions",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Function chatCompletions in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/law-rag-llm.ts:loadLawRagEnv",
+      "type": "function",
+      "name": "loadLawRagEnv",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Function loadLawRagEnv in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/law-rag-llm.ts:value",
+      "type": "function",
+      "name": "value",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Function value in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/law-rag-llm.ts:parseJsonObject",
+      "type": "function",
+      "name": "parseJsonObject",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "Function parseJsonObject in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/law-rag-llm.ts:LawRagRuntime",
+      "type": "class",
+      "name": "LawRagRuntime",
+      "filePath": "lib/law-rag-llm.ts",
+      "summary": "TypeScript domain shape LawRagRuntime declared in lib/law-rag-llm.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:Pace",
+      "type": "class",
+      "name": "Pace",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape Pace declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:LearningStyle",
+      "type": "class",
+      "name": "LearningStyle",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape LearningStyle declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:LessonStatus",
+      "type": "class",
+      "name": "LessonStatus",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape LessonStatus declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:LearningTimePreference",
+      "type": "class",
+      "name": "LearningTimePreference",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape LearningTimePreference declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:VideoLanguage",
+      "type": "class",
+      "name": "VideoLanguage",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape VideoLanguage declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:LearnerProfile",
+      "type": "class",
+      "name": "LearnerProfile",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape LearnerProfile declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:Lesson",
+      "type": "class",
+      "name": "Lesson",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape Lesson declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:VideoTranscriptSegment",
+      "type": "class",
+      "name": "VideoTranscriptSegment",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape VideoTranscriptSegment declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:VideoIndex",
+      "type": "class",
+      "name": "VideoIndex",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape VideoIndex declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:VideoSearchMatch",
+      "type": "class",
+      "name": "VideoSearchMatch",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape VideoSearchMatch declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:VideoRecommendation",
+      "type": "class",
+      "name": "VideoRecommendation",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape VideoRecommendation declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:VideoAnalysis",
+      "type": "class",
+      "name": "VideoAnalysis",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape VideoAnalysis declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:PrerequisiteRelationship",
+      "type": "class",
+      "name": "PrerequisiteRelationship",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape PrerequisiteRelationship declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:LearningPlan",
+      "type": "class",
+      "name": "LearningPlan",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape LearningPlan declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/types.ts:ChatMessage",
+      "type": "class",
+      "name": "ChatMessage",
+      "filePath": "lib/types.ts",
+      "summary": "TypeScript domain shape ChatMessage declared in lib/types.ts."
+    },
+    {
+      "tags": [
+        "dependency"
+      ],
+      "id": "module:yt-dlp-exec",
+      "type": "module",
+      "name": "yt-dlp-exec",
+      "summary": "Node wrapper around yt-dlp used for YouTube search, metadata, and subtitles."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:analyzeYoutubeVideo",
+      "type": "function",
+      "name": "analyzeYoutubeVideo",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function analyzeYoutubeVideo in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:suggestYoutubeVideo",
+      "type": "function",
+      "name": "suggestYoutubeVideo",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function suggestYoutubeVideo in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:suggestPlanWideYoutubeVideo",
+      "type": "function",
+      "name": "suggestPlanWideYoutubeVideo",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function suggestPlanWideYoutubeVideo in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:searchVideoSegments",
+      "type": "function",
+      "name": "searchVideoSegments",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function searchVideoSegments in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:buildDistinctMatchesByLesson",
+      "type": "function",
+      "name": "buildDistinctMatchesByLesson",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function buildDistinctMatchesByLesson in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:filterRelevantVideoMatches",
+      "type": "function",
+      "name": "filterRelevantVideoMatches",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function filterRelevantVideoMatches in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:lessonQuery",
+      "type": "function",
+      "name": "lessonQuery",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function lessonQuery in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:getYoutubeInfo",
+      "type": "function",
+      "name": "getYoutubeInfo",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function getYoutubeInfo in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:buildVideoSearchQuery",
+      "type": "function",
+      "name": "buildVideoSearchQuery",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function buildVideoSearchQuery in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:searchYoutubeCandidates",
+      "type": "function",
+      "name": "searchYoutubeCandidates",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function searchYoutubeCandidates in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:pickVideoCandidate",
+      "type": "function",
+      "name": "pickVideoCandidate",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function pickVideoCandidate in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:getTranscript",
+      "type": "function",
+      "name": "getTranscript",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function getTranscript in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:pickSubtitleUrl",
+      "type": "function",
+      "name": "pickSubtitleUrl",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function pickSubtitleUrl in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:pickSubtitleFormat",
+      "type": "function",
+      "name": "pickSubtitleFormat",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function pickSubtitleFormat in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:parseJson3Transcript",
+      "type": "function",
+      "name": "parseJson3Transcript",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function parseJson3Transcript in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:parseVttTranscript",
+      "type": "function",
+      "name": "parseVttTranscript",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function parseVttTranscript in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:chunkTranscript",
+      "type": "function",
+      "name": "chunkTranscript",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function chunkTranscript in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:titleTranscriptChunks",
+      "type": "function",
+      "name": "titleTranscriptChunks",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function titleTranscriptChunks in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:embedText",
+      "type": "function",
+      "name": "embedText",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function embedText in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:tokenize",
+      "type": "function",
+      "name": "tokenize",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function tokenize in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:hashToken",
+      "type": "function",
+      "name": "hashToken",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function hashToken in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:cosineSimilarity",
+      "type": "function",
+      "name": "cosineSimilarity",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function cosineSimilarity in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:clampWords",
+      "type": "function",
+      "name": "clampWords",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function clampWords in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:withYoutubeStartTime",
+      "type": "function",
+      "name": "withYoutubeStartTime",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function withYoutubeStartTime in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:canonicalYoutubeUrl",
+      "type": "function",
+      "name": "canonicalYoutubeUrl",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function canonicalYoutubeUrl in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:timestampToSeconds",
+      "type": "function",
+      "name": "timestampToSeconds",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function timestampToSeconds in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:secondsToTimestamp",
+      "type": "function",
+      "name": "secondsToTimestamp",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function secondsToTimestamp in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "typescript"
+      ],
+      "id": "function:lib/video-index.ts:stableId",
+      "type": "function",
+      "name": "stableId",
+      "filePath": "lib/video-index.ts",
+      "summary": "Function stableId in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/video-index.ts:YtDlpInfo",
+      "type": "class",
+      "name": "YtDlpInfo",
+      "filePath": "lib/video-index.ts",
+      "summary": "TypeScript domain shape YtDlpInfo declared in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/video-index.ts:YtDlpSearchResult",
+      "type": "class",
+      "name": "YtDlpSearchResult",
+      "filePath": "lib/video-index.ts",
+      "summary": "TypeScript domain shape YtDlpSearchResult declared in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/video-index.ts:SubtitleInfo",
+      "type": "class",
+      "name": "SubtitleInfo",
+      "filePath": "lib/video-index.ts",
+      "summary": "TypeScript domain shape SubtitleInfo declared in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "type"
+      ],
+      "id": "class:lib/video-index.ts:TranscriptItem",
+      "type": "class",
+      "name": "TranscriptItem",
+      "filePath": "lib/video-index.ts",
+      "summary": "TypeScript domain shape TranscriptItem declared in lib/video-index.ts."
+    },
+    {
+      "tags": [
+        "api",
+        "next-route"
+      ],
+      "id": "endpoint:app/api/plan/route.ts:POST",
+      "type": "endpoint",
+      "name": "POST /api/plan",
+      "filePath": "app/api/plan/route.ts",
+      "summary": "Generates and validates a personalized learning plan."
+    },
+    {
+      "tags": [
+        "api",
+        "next-route"
+      ],
+      "id": "endpoint:app/api/tutor/route.ts:POST",
+      "type": "endpoint",
+      "name": "POST /api/tutor",
+      "filePath": "app/api/tutor/route.ts",
+      "summary": "Answers a tutor question for the current plan and lesson context."
+    },
+    {
+      "tags": [
+        "api",
+        "next-route"
+      ],
+      "id": "endpoint:app/api/videos/analyze/route.ts:POST",
+      "type": "endpoint",
+      "name": "POST /api/videos/analyze",
+      "filePath": "app/api/videos/analyze/route.ts",
+      "summary": "Analyzes a supplied YouTube video and matches transcript chunks to lessons."
+    },
+    {
+      "tags": [
+        "api",
+        "next-route"
+      ],
+      "id": "endpoint:app/api/videos/suggest/route.ts:POST",
+      "type": "endpoint",
+      "name": "POST /api/videos/suggest",
+      "filePath": "app/api/videos/suggest/route.ts",
+      "summary": "Suggests a lesson-scoped YouTube video."
+    },
+    {
+      "tags": [
+        "api",
+        "next-route"
+      ],
+      "id": "endpoint:app/api/videos/suggest-shared/route.ts:POST",
+      "type": "endpoint",
+      "name": "POST /api/videos/suggest-shared",
+      "filePath": "app/api/videos/suggest-shared/route.ts",
+      "summary": "Suggests one video that can cover the broader plan."
+    },
+    {
+      "tags": [
+        "domain"
+      ],
+      "id": "concept:personalized-learning-plan",
+      "type": "concept",
+      "name": "Personalized Learning Plan",
+      "summary": "The core domain concept: a learner profile becomes a week-by-week plan with prerequisites, pacing, resources, checkpoints, and quizzes."
+    },
+    {
+      "tags": [
+        "domain"
+      ],
+      "id": "concept:law-rag-runtime",
+      "type": "concept",
+      "name": "Law-RAG Runtime",
+      "summary": "An OpenAI-compatible chat runtime loaded from local or environment configuration to enrich plans, tutor answers, and video decisions."
+    },
+    {
+      "tags": [
+        "domain"
+      ],
+      "id": "concept:youtube-video-index",
+      "type": "concept",
+      "name": "YouTube Video Index",
+      "summary": "Transcript-driven video support that chunks captions, summarizes segments, embeds text, and matches video timestamps to lessons."
+    }
+  ],
+  "edges": [
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/api/plan/route.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/api/tutor/route.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/api/videos/analyze/route.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/api/videos/suggest-shared/route.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/api/videos/suggest/route.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/globals.css",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/layout.tsx",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:app/page.tsx",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:lib/fallback-plan.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:lib/types.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:lib/video-index.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "file:next-env.d.ts",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:package.json",
+      "target": "config:next.config.mjs",
+      "type": "configures",
+      "label": "package scripts and dependencies support this file"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:app/api/plan/route.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:app/api/tutor/route.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:app/api/videos/analyze/route.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:app/api/videos/suggest-shared/route.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:app/api/videos/suggest/route.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:app/layout.tsx",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:app/page.tsx",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:lib/fallback-plan.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:lib/types.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:lib/video-index.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "config:tsconfig.json",
+      "target": "file:next-env.d.ts",
+      "type": "configures",
+      "label": "TypeScript compiler settings apply"
+    },
+    {
+      "weight": 0.6,
+      "source": "service:Dockerfile",
+      "target": "config:package.json",
+      "type": "depends_on",
+      "label": "container install and build use package manifest"
+    },
+    {
+      "weight": 0.6,
+      "source": "service:.dockerignore",
+      "target": "service:Dockerfile",
+      "type": "configures",
+      "label": "excludes files from Docker build context"
+    },
+    {
+      "weight": 0.5,
+      "source": "document:README.md",
+      "target": "file:app/page.tsx",
+      "type": "documents",
+      "label": "README explains this project area"
+    },
+    {
+      "weight": 0.5,
+      "source": "document:README.md",
+      "target": "file:app/api/plan/route.ts",
+      "type": "documents",
+      "label": "README explains this project area"
+    },
+    {
+      "weight": 0.5,
+      "source": "document:README.md",
+      "target": "file:app/api/tutor/route.ts",
+      "type": "documents",
+      "label": "README explains this project area"
+    },
+    {
+      "weight": 0.5,
+      "source": "document:README.md",
+      "target": "file:lib/video-index.ts",
+      "type": "documents",
+      "label": "README explains this project area"
+    },
+    {
+      "weight": 0.5,
+      "source": "document:README.md",
+      "target": "service:Dockerfile",
+      "type": "documents",
+      "label": "README explains this project area"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/plan/route.ts",
+      "target": "module:next/server",
+      "type": "imports",
+      "label": "imports next/server"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/plan/route.ts",
+      "target": "file:lib/fallback-plan.ts",
+      "type": "imports",
+      "label": "imports @/lib/fallback-plan"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/plan/route.ts",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/plan/route.ts",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "imports",
+      "label": "imports @/lib/law-rag-llm"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:POST",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:hasRepeatedLessons",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeLearningPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeLearningTimePreference",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeVideoLanguage",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizePrerequisites",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeStringList",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizePrerequisiteGraph",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeRecommendedWeeks",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeDurationAdvice",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeLesson",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizePacing",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "function:app/api/plan/route.ts:normalizeStatus",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "module:next/server",
+      "type": "imports",
+      "label": "imports next/server"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "imports",
+      "label": "imports @/lib/law-rag-llm"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "function:app/api/tutor/route.ts:POST",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "function:app/api/tutor/route.ts:fallbackTutorAnswer",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/analyze/route.ts",
+      "target": "module:next/server",
+      "type": "imports",
+      "label": "imports next/server"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/analyze/route.ts",
+      "target": "file:lib/video-index.ts",
+      "type": "imports",
+      "label": "imports @/lib/video-index"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/analyze/route.ts",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/videos/analyze/route.ts",
+      "target": "function:app/api/videos/analyze/route.ts:POST",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/suggest-shared/route.ts",
+      "target": "module:next/server",
+      "type": "imports",
+      "label": "imports next/server"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/suggest-shared/route.ts",
+      "target": "file:lib/video-index.ts",
+      "type": "imports",
+      "label": "imports @/lib/video-index"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/suggest-shared/route.ts",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/videos/suggest-shared/route.ts",
+      "target": "function:app/api/videos/suggest-shared/route.ts:POST",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/suggest/route.ts",
+      "target": "module:next/server",
+      "type": "imports",
+      "label": "imports next/server"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/suggest/route.ts",
+      "target": "file:lib/video-index.ts",
+      "type": "imports",
+      "label": "imports @/lib/video-index"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/api/videos/suggest/route.ts",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/videos/suggest/route.ts",
+      "target": "function:app/api/videos/suggest/route.ts:POST",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/layout.tsx",
+      "target": "module:next",
+      "type": "imports",
+      "label": "imports next"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/layout.tsx",
+      "target": "function:app/layout.tsx:RootLayout",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/page.tsx",
+      "target": "module:react",
+      "type": "imports",
+      "label": "imports react"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/page.tsx",
+      "target": "module:lucide-react",
+      "type": "imports",
+      "label": "imports lucide-react"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/page.tsx",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:Home",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:generatePlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:selectLesson",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:updateLessonStatus",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:ensureLessonChat",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:openChatForLesson",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:selectChatLesson",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:sendTutorQuestion",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:clearCurrentChat",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:askTutor",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:analyzeVideo",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:analyzeVideoUrl",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:suggestAndAnalyzeVideo",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:suggestAndAnalyzeAllVideos",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:suggestAndAnalyzeSharedVideo",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:addLessonToSchedule",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:moveScheduleEvent",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:removeScheduleEvent",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:handleDropSchedule",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:applySavedTopic",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:clearVideoStateForPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:deleteSavedPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:applySavedPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:buildChatTopic",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:upsertChatTopic",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:topicToPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:upsertSavedPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:omitRecordKey",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:filterRecordByKeys",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:legacyLessonMap",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:planStorageId",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:videoJobKey",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:normalizeLoadedPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:isLearningPlanLike",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:normalizeLoadedProfile",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:normalizeLessonList",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:buildInitialSchedule",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:addMinutesToTime",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:secondsToTimestamp",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:selectDistinctVideoMatches",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:stableTopicId",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:shouldSuggestTopic",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:normalizeSearchText",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:pacingLabel",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:slugify",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:isLessonSupportMessage",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:buildLessonSupportMessage",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:AssetList",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:formatAssetItem",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:formatStringAssetItem",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:firstString",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:AssistantMessage",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:parseMessageBlocks",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:normalizeAssistantContent",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:cleanAssistantLine",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "function:app/page.tsx:renderInlineMarkdown",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "class:app/page.tsx:AppView",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "class:app/page.tsx:ChatHistoryByLesson",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "class:app/page.tsx:ScheduleEvent",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "class:app/page.tsx:ChatTopic",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "class:app/page.tsx:PersistedAppState",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "class:app/page.tsx:FormattedAssetItem",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/page.tsx",
+      "target": "class:app/page.tsx:MessageBlock",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:estimateRecommendedWeeks",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:generateFallbackPlan",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:normalizeVideoLanguage",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:getLessonPacing",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildDurationAdvice",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildPrerequisiteGraph",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:analyzeTopic",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:recommendWeeks",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildPhases",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:phaseSequence",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildActivities",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildHomework",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildResources",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildKhanAcademyUrl",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:buildQuiz",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:detectGoalFocus",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:isAmbitiousGoal",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:includesAny",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:clean",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "function:lib/fallback-plan.ts:slugify",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "class:lib/fallback-plan.ts:PlanPhase",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "class:lib/fallback-plan.ts:TopicProfile",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "class:lib/fallback-plan.ts:PhaseTemplate",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "class:lib/fallback-plan.ts:LessonPacing",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "module:node:fs",
+      "type": "imports",
+      "label": "imports node:fs"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "module:node:path",
+      "type": "imports",
+      "label": "imports node:path"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "function:lib/law-rag-llm.ts:getLawRagRuntime",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "function:lib/law-rag-llm.ts:lawRagChatText",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "function:lib/law-rag-llm.ts:lawRagChatJson",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "function:lib/law-rag-llm.ts:chatCompletions",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "function:lib/law-rag-llm.ts:loadLawRagEnv",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "function:lib/law-rag-llm.ts:value",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "function:lib/law-rag-llm.ts:parseJsonObject",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "class:lib/law-rag-llm.ts:LawRagRuntime",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:Pace",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:LearningStyle",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:LessonStatus",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:LearningTimePreference",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:VideoLanguage",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:LearnerProfile",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:Lesson",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:VideoTranscriptSegment",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:VideoIndex",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:VideoSearchMatch",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:VideoRecommendation",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:VideoAnalysis",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:PrerequisiteRelationship",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:LearningPlan",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/types.ts",
+      "target": "class:lib/types.ts:ChatMessage",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/video-index.ts",
+      "target": "module:node:path",
+      "type": "imports",
+      "label": "imports node:path"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/video-index.ts",
+      "target": "module:yt-dlp-exec",
+      "type": "imports",
+      "label": "imports yt-dlp-exec"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/video-index.ts",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "imports",
+      "label": "imports @/lib/law-rag-llm"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/video-index.ts",
+      "target": "file:lib/types.ts",
+      "type": "imports",
+      "label": "imports @/lib/types"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:analyzeYoutubeVideo",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:suggestYoutubeVideo",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:suggestPlanWideYoutubeVideo",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:searchVideoSegments",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:buildDistinctMatchesByLesson",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:filterRelevantVideoMatches",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:lessonQuery",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:getYoutubeInfo",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:buildVideoSearchQuery",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:searchYoutubeCandidates",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:pickVideoCandidate",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:getTranscript",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:pickSubtitleUrl",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:pickSubtitleFormat",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:parseJson3Transcript",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:parseVttTranscript",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:chunkTranscript",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:titleTranscriptChunks",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:embedText",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:tokenize",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:hashToken",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:cosineSimilarity",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:clampWords",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:withYoutubeStartTime",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:canonicalYoutubeUrl",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:timestampToSeconds",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:secondsToTimestamp",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "function:lib/video-index.ts:stableId",
+      "type": "contains",
+      "label": "declares function"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "class:lib/video-index.ts:YtDlpInfo",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "class:lib/video-index.ts:YtDlpSearchResult",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "class:lib/video-index.ts:SubtitleInfo",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:lib/video-index.ts",
+      "target": "class:lib/video-index.ts:TranscriptItem",
+      "type": "contains",
+      "label": "declares type shape"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/plan/route.ts",
+      "target": "endpoint:app/api/plan/route.ts:POST",
+      "type": "contains",
+      "label": "exports route handler"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "endpoint:app/api/tutor/route.ts:POST",
+      "type": "contains",
+      "label": "exports route handler"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/videos/analyze/route.ts",
+      "target": "endpoint:app/api/videos/analyze/route.ts:POST",
+      "type": "contains",
+      "label": "exports route handler"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/videos/suggest/route.ts",
+      "target": "endpoint:app/api/videos/suggest/route.ts:POST",
+      "type": "contains",
+      "label": "exports route handler"
+    },
+    {
+      "weight": 1,
+      "source": "file:app/api/videos/suggest-shared/route.ts",
+      "target": "endpoint:app/api/videos/suggest-shared/route.ts:POST",
+      "type": "contains",
+      "label": "exports route handler"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/api/plan/route.ts",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "calls",
+      "label": "uses Law-RAG JSON chat to generate plans"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/api/plan/route.ts",
+      "target": "file:lib/fallback-plan.ts",
+      "type": "calls",
+      "label": "falls back to deterministic plan generation"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "calls",
+      "label": "uses Law-RAG text chat for tutor answers"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/api/videos/analyze/route.ts",
+      "target": "file:lib/video-index.ts",
+      "type": "calls",
+      "label": "delegates YouTube transcript analysis"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/api/videos/suggest/route.ts",
+      "target": "file:lib/video-index.ts",
+      "type": "calls",
+      "label": "delegates lesson video recommendation"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/api/videos/suggest-shared/route.ts",
+      "target": "file:lib/video-index.ts",
+      "type": "calls",
+      "label": "delegates plan-wide video recommendation"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:lib/video-index.ts",
+      "target": "file:lib/law-rag-llm.ts",
+      "type": "calls",
+      "label": "uses LLM JSON calls for search queries, candidate choice, and transcript segment titles"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "file:lib/types.ts",
+      "type": "depends_on",
+      "label": "uses shared learning plan types"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:lib/video-index.ts",
+      "target": "file:lib/types.ts",
+      "type": "depends_on",
+      "label": "uses video and plan types"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/page.tsx",
+      "target": "file:app/api/plan/route.ts",
+      "type": "calls",
+      "label": "fetches plan generation API"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/page.tsx",
+      "target": "file:app/api/tutor/route.ts",
+      "type": "calls",
+      "label": "fetches tutor answer API"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/page.tsx",
+      "target": "file:app/api/videos/analyze/route.ts",
+      "type": "calls",
+      "label": "fetches video analysis API"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/page.tsx",
+      "target": "file:app/api/videos/suggest/route.ts",
+      "type": "calls",
+      "label": "fetches video recommendation API"
+    },
+    {
+      "weight": 0.8,
+      "source": "file:app/page.tsx",
+      "target": "file:app/api/videos/suggest-shared/route.ts",
+      "type": "calls",
+      "label": "fetches shared video recommendation API"
+    },
+    {
+      "weight": 0.7,
+      "source": "file:app/layout.tsx",
+      "target": "file:app/globals.css",
+      "type": "imports",
+      "label": "loads global styles"
+    },
+    {
+      "weight": 0.5,
+      "source": "file:app/api/plan/route.ts",
+      "target": "concept:personalized-learning-plan",
+      "type": "related",
+      "label": "produces personalized plans"
+    },
+    {
+      "weight": 0.5,
+      "source": "file:lib/fallback-plan.ts",
+      "target": "concept:personalized-learning-plan",
+      "type": "related",
+      "label": "implements deterministic plan creation"
+    },
+    {
+      "weight": 0.5,
+      "source": "file:lib/law-rag-llm.ts",
+      "target": "concept:law-rag-runtime",
+      "type": "related",
+      "label": "encapsulates runtime calls"
+    },
+    {
+      "weight": 0.5,
+      "source": "file:app/api/tutor/route.ts",
+      "target": "concept:law-rag-runtime",
+      "type": "related",
+      "label": "uses runtime for tutor support"
+    },
+    {
+      "weight": 0.5,
+      "source": "file:lib/video-index.ts",
+      "target": "concept:youtube-video-index",
+      "type": "related",
+      "label": "implements transcript indexing"
+    },
+    {
+      "weight": 0.5,
+      "source": "file:app/page.tsx",
+      "target": "concept:youtube-video-index",
+      "type": "related",
+      "label": "surfaces video support workflow"
+    }
+  ],
+  "layers": [
+    {
+      "id": "layer:user-experience",
+      "name": "User Experience",
+      "description": "Browser-facing Next.js pages, layout, visual styling, and public asset placeholders.",
+      "nodeIds": [
+        "file:app/globals.css",
+        "file:app/layout.tsx",
+        "file:app/page.tsx",
+        "file:public/.gitkeep"
+      ]
+    },
+    {
+      "id": "layer:api-routes",
+      "name": "API Routes",
+      "description": "Server route handlers that expose plan generation, tutor answers, and video analysis or recommendation endpoints.",
+      "nodeIds": [
+        "file:app/api/plan/route.ts",
+        "file:app/api/tutor/route.ts",
+        "file:app/api/videos/analyze/route.ts",
+        "file:app/api/videos/suggest-shared/route.ts",
+        "file:app/api/videos/suggest/route.ts",
+        "endpoint:app/api/plan/route.ts:POST",
+        "endpoint:app/api/tutor/route.ts:POST",
+        "endpoint:app/api/videos/analyze/route.ts:POST",
+        "endpoint:app/api/videos/suggest/route.ts:POST",
+        "endpoint:app/api/videos/suggest-shared/route.ts:POST"
+      ]
+    },
+    {
+      "id": "layer:domain-services",
+      "name": "Domain Services",
+      "description": "Reusable application logic for fallback plans, Law-RAG calls, shared types, and YouTube transcript indexing.",
+      "nodeIds": [
+        "file:lib/fallback-plan.ts",
+        "file:lib/law-rag-llm.ts",
+        "file:lib/types.ts",
+        "file:lib/video-index.ts"
+      ]
+    },
+    {
+      "id": "layer:configuration-and-deployment",
+      "name": "Configuration and Deployment",
+      "description": "Project documentation, package metadata, TypeScript and Next.js config, environment examples, and container build files.",
+      "nodeIds": [
+        "service:.dockerignore",
+        "config:.env.example",
+        "config:.understand-anything/.understandignore",
+        "service:Dockerfile",
+        "file:next-env.d.ts",
+        "config:next.config.mjs",
+        "config:package.json",
+        "document:README.md",
+        "config:tsconfig.json"
+      ]
+    }
+  ],
+  "tour": [
+    {
+      "order": 1,
+      "title": "Project Overview",
+      "description": "Start with the README and package manifest to understand LearnBuddy, local development, Docker deployment, and the main dependencies.",
+      "nodeIds": [
+        "document:README.md",
+        "config:package.json"
+      ]
+    },
+    {
+      "order": 2,
+      "title": "Main Application Flow",
+      "description": "Read the client page, layout, and global CSS to see how profile capture, plan navigation, schedule, video support, and tutor chat are presented.",
+      "nodeIds": [
+        "file:app/page.tsx",
+        "file:app/layout.tsx",
+        "file:app/globals.css"
+      ]
+    },
+    {
+      "order": 3,
+      "title": "Plan Generation",
+      "description": "Follow the plan route into the Law-RAG JSON helper and deterministic fallback generator to understand how personalized plans are created and normalized.",
+      "nodeIds": [
+        "file:app/api/plan/route.ts",
+        "file:lib/law-rag-llm.ts",
+        "file:lib/fallback-plan.ts",
+        "file:lib/types.ts"
+      ]
+    },
+    {
+      "order": 4,
+      "title": "Tutor And Video Support",
+      "description": "Inspect tutor and video routes, then the video index service, to see how chat answers, YouTube suggestions, transcript analysis, and lesson matches work.",
+      "nodeIds": [
+        "file:app/api/tutor/route.ts",
+        "file:app/api/videos/analyze/route.ts",
+        "file:app/api/videos/suggest/route.ts",
+        "file:app/api/videos/suggest-shared/route.ts",
+        "file:lib/video-index.ts"
+      ]
+    },
+    {
+      "order": 5,
+      "title": "Configuration And Runtime",
+      "description": "Finish with TypeScript, Next.js, environment, Docker, and ignore configuration to understand how the app builds and runs.",
+      "nodeIds": [
+        "config:tsconfig.json",
+        "config:next.config.mjs",
+        "config:.env.example",
+        "service:Dockerfile",
+        "service:.dockerignore"
+      ]
+    }
+  ]
+}

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { estimateRecommendedWeeks, generateFallbackPlan } from '@/lib/fallback-plan'
-import type { LearnerProfile, LearningPlan, Lesson, LessonStatus, PrerequisiteRelationship } from '@/lib/types'
+import { LEARNING_PLAN_SYSTEM_PROMPT } from '@/lib/learning-plan-prompt'
+import { buildLearningPlanUserPrompt } from '@/lib/learning-plan-user-prompt'
+import type { LearnerProfile, LearningPlan, Lesson, LessonStatus, PrerequisiteRelationship, RecommendedResource, ResourceLanguage, ResourceLevel, ResourceType } from '@/lib/types'
 import { lawRagChatJson } from '@/lib/law-rag-llm'
 
 export async function POST(request: Request) {
@@ -10,12 +12,11 @@ export async function POST(request: Request) {
     const parsed = await lawRagChatJson([
       {
         role: 'system',
-        content:
-          'You generate personalized learning plans in Vietnamese. The plan must change when topic, goal, level, duration, pace, learningStyle, or learningTimePreference changes. For every topic, identify prerequisite foundational knowledge and prerequisiteGraph relationships. Recommend a suitable number of weeks as recommendedWeeks, but returned lessons must follow the learner requested durationWeeks with one lesson per requested week. If requested durationWeeks is shorter than recommendedWeeks, include durationAdvice that suggests skimming easy/less important parts and prioritizing difficult/foundational parts. If requested durationWeeks is longer than recommendedWeeks, include durationAdvice that suggests studying difficult parts more deeply with extra practice. Week 1 must cover prerequisite/foundation review. Do not repeat lesson titles, objectives, activities, homework, resources, checkpoints, or quizzes across weeks. Return strict JSON with title, summary, prerequisites, prerequisiteGraph, recommendedWeeks, durationAdvice, and lessons. prerequisiteGraph items must include from, to, reason. Each lesson must include id, week, pacing, title, objective, durationMinutes, activities, homework, resources, checkpoint, quiz, status. Do not include video suggestions or timestamp support; video retrieval is handled separately from a user-provided YouTube URL. pacing must be one of skim, deep, normal.'
+        content: LEARNING_PLAN_SYSTEM_PROMPT
       },
       {
         role: 'user',
-        content: JSON.stringify({ profile })
+        content: buildLearningPlanUserPrompt(profile)
       }
     ])
 
@@ -150,6 +151,7 @@ async function normalizeLesson(rawLesson: unknown, index: number, profile: Learn
     activities: Array.isArray(lesson.activities) && lesson.activities.length > 0 ? lesson.activities.map(String) : [`Học nội dung chính về ${profile.topic}`, 'Làm bài tập ngắn'],
     homework: normalizeStringList(lesson.homework, [`Tóm tắt bài ${index + 1} bằng lời của bạn`, `Làm một bài tập nhỏ về ${profile.topic}`]),
     resources: normalizeStringList(lesson.resources, [`Tài liệu nhập môn về ${profile.topic}`, `Video/bài giảng liên quan đến ${fallbackTitle}`]),
+    recommendedResources: normalizeRecommendedResources(lesson.recommendedResources, profile, title),
     checkpoint: typeof lesson.checkpoint === 'string' && lesson.checkpoint.trim() ? lesson.checkpoint : `Giải thích được nội dung chính của ${fallbackTitle}.`,
     quiz: Array.isArray(lesson.quiz) && lesson.quiz.length > 0 ? lesson.quiz.map(String) : ['Bạn đã hiểu điểm quan trọng nhất nào?'],
     status: normalizeStatus(lesson.status)
@@ -168,4 +170,46 @@ function normalizePacing(pacing: unknown, index: number, profile: LearnerProfile
 function normalizeStatus(status: unknown): LessonStatus {
   if (status === 'doing' || status === 'done' || status === 'review') return status
   return 'todo'
+}
+
+function normalizeRecommendedResources(value: unknown, profile: LearnerProfile, lessonTitle: string): RecommendedResource[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((item) => normalizeRecommendedResource(item, profile, lessonTitle))
+    .filter((item): item is RecommendedResource => Boolean(item))
+    .slice(0, 5)
+}
+
+function normalizeRecommendedResource(item: unknown, profile: LearnerProfile, lessonTitle: string): RecommendedResource | null {
+  if (!item || typeof item !== 'object') return null
+  const record = item as Partial<RecommendedResource>
+  const searchKeyword = typeof record.searchKeyword === 'string' && record.searchKeyword.trim() ? record.searchKeyword.trim() : `${profile.topic} ${lessonTitle} tutorial`
+
+  return {
+    type: normalizeResourceType(record.type),
+    primaryLanguage: normalizeResourceLanguage(record.primaryLanguage, profile.videoLanguage),
+    searchKeyword,
+    englishKeywords: normalizeStringList(record.englishKeywords, [`${profile.topic} ${lessonTitle} explained`, `${profile.topic} ${lessonTitle} tutorial`]).slice(0, 6),
+    vietnameseKeywords: normalizeStringList(record.vietnameseKeywords, [`giải thích ${profile.topic} ${lessonTitle}`, `hướng dẫn ${profile.topic} ${lessonTitle}`]).slice(0, 6),
+    level: normalizeResourceLevel(record.level, profile.level),
+    learningStyleFit: typeof record.learningStyleFit === 'string' && record.learningStyleFit.trim() ? record.learningStyleFit.trim() : `Phù hợp với phong cách học ${profile.learningStyle}.`,
+    whyRecommended: typeof record.whyRecommended === 'string' && record.whyRecommended.trim() ? record.whyRecommended.trim() : `Từ khóa này bám sát lesson "${lessonTitle}".`
+  }
+}
+
+function normalizeResourceType(value: unknown): ResourceType {
+  if (value === 'video' || value === 'article' || value === 'documentation' || value === 'exercise' || value === 'project') return value
+  return 'video'
+}
+
+function normalizeResourceLanguage(value: unknown, videoLanguage: LearnerProfile['videoLanguage']): ResourceLanguage {
+  if (value === 'Vietnamese' || value === 'English') return value
+  return videoLanguage === 'en' ? 'English' : 'Vietnamese'
+}
+
+function normalizeResourceLevel(value: unknown, level: string): ResourceLevel {
+  if (value === 'Beginner' || value === 'Intermediate' || value === 'Advanced') return value
+  if (level === 'advanced') return 'Advanced'
+  if (level === 'intermediate') return 'Intermediate'
+  return 'Beginner'
 }

@@ -11,8 +11,15 @@ const videoMatchRelativeFloor = 0.35
 type YtDlpInfo = {
   id?: string
   title?: string
+  description?: string
   duration?: number
   webpage_url?: string
+  http_headers?: Record<string, string>
+  chapters?: Array<{
+    title?: string
+    start_time?: number
+    end_time?: number
+  }>
   requested_subtitles?: Record<string, SubtitleInfo>
   subtitles?: Record<string, SubtitleInfo[]>
   automatic_captions?: Record<string, SubtitleInfo[]>
@@ -36,12 +43,15 @@ type TranscriptItem = {
 export async function analyzeYoutubeVideo(url: string, lessons: Lesson[], language: VideoLanguage = 'vi'): Promise<VideoAnalysis> {
   const info = await getYoutubeInfo(url, language)
   const transcript = await getTranscript(info, language)
-  if (transcript.length === 0) {
-    throw new Error('Không lấy được transcript. Hãy dùng video có caption public hoặc thử video khác.')
+  const transcriptChunks = transcript.length > 0 ? chunkTranscript(transcript) : []
+  const useTranscript = transcriptChunks.length > 0
+  const chunks = useTranscript ? transcriptChunks : chapterTranscriptItems(info)
+
+  if (chunks.length === 0) {
+    throw new Error('Video này không có caption/transcript public và cũng không có chapter timestamp để phân tích. Hãy chọn video có phụ đề công khai, auto-caption, hoặc chapter.')
   }
 
-  const chunks = chunkTranscript(transcript)
-  const titledChunks = await titleTranscriptChunks(chunks, info.title || 'YouTube video')
+  const titledChunks = useTranscript ? await titleTranscriptChunks(chunks, info.title || 'YouTube video') : titleChapterChunks(chunks)
   const video: VideoIndex = {
     id: info.id || stableId(url),
     url: info.webpage_url || url,
@@ -64,20 +74,27 @@ export async function analyzeYoutubeVideo(url: string, lessons: Lesson[], langua
   }
 }
 
-export async function suggestYoutubeVideo(plan: LearningPlan, lesson: Lesson | null): Promise<VideoRecommendation> {
+export async function suggestYoutubeVideo(plan: LearningPlan, lesson: Lesson | null, excludedUrls: string[] = []): Promise<VideoRecommendation> {
   const query = await buildVideoSearchQuery(plan, lesson)
-  const candidates = await searchYoutubeCandidates(query)
+  const excluded = new Set(excludedUrls.map(normalizeVideoUrlForComparison).filter(Boolean))
+  const allCandidates = await searchYoutubeCandidates(query, 24)
+  const distinctCandidates = allCandidates.filter((candidate) => !excluded.has(normalizeVideoUrlForComparison(candidate.webpage_url || canonicalYoutubeUrl(candidate.id || ''))))
+  const candidates = distinctCandidates.length > 0 ? distinctCandidates : allCandidates
 
   if (candidates.length === 0) {
     throw new Error('Không tìm được video YouTube phù hợp.')
   }
 
   const picked = await pickVideoCandidate(plan, lesson, query, candidates)
+  const fallbackReason =
+    distinctCandidates.length === 0 && excluded.size > 0
+      ? 'Không tìm được video khác đủ phù hợp trong kết quả YouTube hiện tại, nên hệ thống chọn kết quả sát bài học nhất.'
+      : ''
   return {
     title: picked.title || 'YouTube video',
     url: picked.webpage_url || canonicalYoutubeUrl(picked.id || ''),
     durationMinutes: Math.max(1, Math.round((picked.duration || 60) / 60)),
-    reason: picked.reason || `Phù hợp với bài "${lesson?.title || plan.title}".`,
+    reason: fallbackReason || picked.reason || `Phù hợp với bài "${lesson?.title || plan.title}".`,
     query,
     scope: lesson ? 'lesson' : 'plan'
   }
@@ -172,7 +189,14 @@ function filterRelevantVideoMatches(matches: VideoSearchMatch[]) {
 }
 
 function lessonQuery(lesson: Lesson) {
-  return [lesson.title, lesson.objective, lesson.checkpoint, ...lesson.activities, ...lesson.homework, ...lesson.resources, ...lesson.quiz].join('\n')
+  const resourceKeywords = (lesson.recommendedResources || []).flatMap((resource) => [
+    resource.searchKeyword,
+    ...resource.englishKeywords,
+    ...resource.vietnameseKeywords,
+    resource.whyRecommended,
+    resource.learningStyleFit
+  ])
+  return [lesson.title, lesson.objective, lesson.checkpoint, ...lesson.activities, ...lesson.homework, ...lesson.resources, ...resourceKeywords, ...lesson.quiz].join('\n')
 }
 
 async function getYoutubeInfo(url: string, language: VideoLanguage): Promise<YtDlpInfo> {
@@ -188,15 +212,45 @@ async function getYoutubeInfo(url: string, language: VideoLanguage): Promise<YtD
   }) as Promise<YtDlpInfo>
 }
 
+function chapterTranscriptItems(info: YtDlpInfo): Array<TranscriptItem & { title: string; summary: string }> {
+  const chapters = (info.chapters || [])
+    .map((chapter, index, items) => {
+      const startSeconds = Math.max(0, Number(chapter.start_time) || 0)
+      const fallbackEnd = items[index + 1]?.start_time || info.duration || startSeconds + 60
+      const endSeconds = Math.max(startSeconds + 1, Number(chapter.end_time) || Number(fallbackEnd) || startSeconds + 60)
+      const title = chapter.title?.trim() || `Đoạn ${index + 1}`
+      return {
+        startSeconds,
+        endSeconds,
+        title,
+        summary: 'Video không có transcript public; timestamp này lấy từ chapter của YouTube.',
+        text: `${title}. ${info.title || ''}. ${info.description || ''}`.slice(0, 900)
+      }
+    })
+    .filter((chapter) => chapter.endSeconds > chapter.startSeconds)
+
+  return chapters.slice(0, 80)
+}
+
+function titleChapterChunks(chunks: Array<TranscriptItem & { title?: string; summary?: string }>) {
+  return chunks.map((chunk, index) => ({
+    ...chunk,
+    title: chunk.title || `Đoạn ${index + 1}`,
+    summary: chunk.summary || 'Timestamp lấy từ chapter của YouTube.'
+  }))
+}
+
 async function buildVideoSearchQuery(plan: LearningPlan, lesson: Lesson | null) {
   const languageLabel = plan.profile.videoLanguage === 'en' ? 'English' : 'Vietnamese'
-  const fallback = `${plan.profile.topic} ${lesson?.title || plan.profile.goal} ${languageLabel} tutorial`
+  const fallback = lesson
+    ? `${plan.profile.topic} ${lesson.title} ${lesson.objective} ${plan.profile.level} ${languageLabel} tutorial`
+    : `${plan.profile.topic} ${plan.profile.goal} ${plan.profile.level} ${languageLabel} tutorial`
   const parsed = await lawRagChatJson(
     [
       {
         role: 'system',
         content:
-          'Tạo một truy vấn YouTube ngắn để tìm video học tập phù hợp. Trả về JSON {"query":"..."}. Query nên có chủ đề, trình độ, bài học, từ khóa tutorial/course/lesson nếu phù hợp. Không trả URL.'
+          'Tạo một truy vấn YouTube ngắn, cụ thể cho đúng bài học hiện tại. Trả về JSON {"query":"..."}. Query phải có chủ đề chính, trình độ, trọng tâm riêng của lesson, và từ khóa tutorial/lesson nếu phù hợp. Tránh query quá rộng kiểu complete course/full course nếu đang tìm video cho một tuần cụ thể. Không trả URL.'
       },
       {
         role: 'user',
@@ -207,11 +261,19 @@ async function buildVideoSearchQuery(plan: LearningPlan, lesson: Lesson | null) 
           videoLanguage: languageLabel,
           lesson: lesson
             ? {
+                week: lesson.week,
                 title: lesson.title,
                 objective: lesson.objective,
-                checkpoint: lesson.checkpoint
+                checkpoint: lesson.checkpoint,
+                activities: lesson.activities,
+                homework: lesson.homework
               }
-            : null
+            : null,
+          allLessons: plan.lessons.map((item) => ({
+            week: item.week,
+            title: item.title,
+            objective: item.objective
+          }))
         })
       }
     ],
@@ -229,12 +291,19 @@ async function searchYoutubeCandidates(query: string, limit = 8): Promise<Array<
     noWarnings: true
   })) as YtDlpSearchResult
 
+  const seen = new Set<string>()
   return (result.entries || [])
     .filter((entry) => entry.id && entry.title)
     .map((entry) => ({
       ...entry,
       webpage_url: entry.webpage_url || canonicalYoutubeUrl(entry.id || '')
     }))
+    .filter((entry) => {
+      const key = normalizeVideoUrlForComparison(entry.webpage_url || canonicalYoutubeUrl(entry.id || ''))
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
 }
 
 async function pickVideoCandidate(
@@ -248,7 +317,7 @@ async function pickVideoCandidate(
       {
         role: 'system',
         content:
-          'Chọn đúng 1 video YouTube phù hợp nhất cho người học từ danh sách ứng viên. Chỉ chọn theo index có sẵn, không bịa URL. Ưu tiên video giáo dục rõ ràng, đúng bài học, thời lượng hợp lý, có khả năng có transcript/caption. Trả về JSON {"index":0,"reason":"..."} bằng tiếng Việt.'
+          'Chọn đúng 1 video YouTube phù hợp nhất cho lesson hiện tại từ danh sách ứng viên. Chỉ chọn theo index có sẵn, không bịa URL. Ưu tiên video giáo dục rõ ràng, đúng trọng tâm riêng của lesson, đúng trình độ, thời lượng hợp lý, có khả năng có transcript/caption. Tránh chọn video quá tổng quát hoặc full course nếu lesson chỉ cần một chủ đề hẹp. Trả về JSON {"index":0,"reason":"..."} bằng tiếng Việt.'
       },
       {
         role: 'user',
@@ -263,11 +332,21 @@ async function pickVideoCandidate(
           },
           lesson: lesson
             ? {
+                week: lesson.week,
                 title: lesson.title,
                 objective: lesson.objective,
-                checkpoint: lesson.checkpoint
+                checkpoint: lesson.checkpoint,
+                activities: lesson.activities,
+                homework: lesson.homework
               }
             : null,
+          neighboringLessons: plan.lessons
+            .filter((item) => !lesson || Math.abs(item.week - lesson.week) <= 1)
+            .map((item) => ({
+              week: item.week,
+              title: item.title,
+              objective: item.objective
+            })),
           candidates: candidates.map((candidate, index) => ({
             index,
             title: candidate.title,
@@ -290,8 +369,16 @@ async function getTranscript(info: YtDlpInfo, language: VideoLanguage): Promise<
   const subtitleUrl = pickSubtitleUrl(info, language)
   if (!subtitleUrl) return []
 
-  const response = await fetch(subtitleUrl)
-  if (!response.ok) return []
+  const response = await fetch(subtitleUrl, {
+    headers: {
+      'user-agent': info.http_headers?.['User-Agent'] || 'Mozilla/5.0',
+      accept: info.http_headers?.Accept || '*/*',
+      'accept-language': info.http_headers?.['Accept-Language'] || (language === 'en' ? 'en-US,en;q=0.9' : 'vi,en-US;q=0.8,en;q=0.7')
+    }
+  })
+  if (!response.ok) {
+    return []
+  }
   const text = await response.text()
 
   try {
@@ -475,6 +562,20 @@ function withYoutubeStartTime(value: string, seconds: number) {
 
 function canonicalYoutubeUrl(videoId: string) {
   return `https://www.youtube.com/watch?v=${videoId}`
+}
+
+function normalizeVideoUrlForComparison(value: string) {
+  try {
+    const url = new URL(value)
+    const host = url.hostname.replace(/^www\./, '')
+    const videoId = host === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v')
+    if (videoId) return `youtube:${videoId}`
+    url.search = ''
+    url.hash = ''
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return value.trim().toLowerCase()
+  }
 }
 
 function timestampToSeconds(value: string) {

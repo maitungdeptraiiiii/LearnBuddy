@@ -17,7 +17,7 @@ import {
   Sparkles,
   Trash2
 } from 'lucide-react'
-import type { ChatMessage, LearnerProfile, LearningPlan, Lesson, LessonStatus, VideoAnalysis, VideoRecommendation, VideoSearchMatch } from '@/lib/types'
+import type { ChatMessage, LearnerProfile, LearningPlan, Lesson, LessonQuiz, LessonStatus, VideoAnalysis, VideoRecommendation, VideoSearchMatch } from '@/lib/types'
 
 const initialProfile: LearnerProfile = {
   topic: 'Python cơ bản',
@@ -48,6 +48,7 @@ const preferredScheduleStart = {
 } satisfies Record<LearnerProfile['learningTimePreference'], string>
 
 const storageKey = 'learnmate-app-state-v2'
+const quizStorageVersion = 2
 
 type AppView = 'plan' | 'schedule' | 'videos' | 'chat'
 type ChatHistoryByLesson = Record<string, ChatMessage[]>
@@ -79,6 +80,9 @@ type PersistedAppState = {
   youtubeUrlByLesson: Record<string, string>
   videoAnalysisByLesson: Record<string, VideoAnalysis>
   videoRecommendationByLesson: Record<string, VideoRecommendation>
+  quizByLesson: Record<string, LessonQuiz>
+  quizAnswersByLesson: Record<string, Record<string, number>>
+  quizStorageVersion?: number
   youtubeUrl?: string
   videoAnalysis?: VideoAnalysis | null
   videoRecommendation?: VideoRecommendation | null
@@ -99,8 +103,13 @@ export default function Home() {
   const [youtubeUrlByLesson, setYoutubeUrlByLesson] = useState<Record<string, string>>({})
   const [videoAnalysisByLesson, setVideoAnalysisByLesson] = useState<Record<string, VideoAnalysis>>({})
   const [videoRecommendationByLesson, setVideoRecommendationByLesson] = useState<Record<string, VideoRecommendation>>({})
+  const [videoPlayerStartByLesson, setVideoPlayerStartByLesson] = useState<Record<string, number>>({})
+  const [quizByLesson, setQuizByLesson] = useState<Record<string, LessonQuiz>>({})
+  const [quizAnswersByLesson, setQuizAnswersByLesson] = useState<Record<string, Record<string, number>>>({})
+  const [isQuizPanelOpen, setIsQuizPanelOpen] = useState(false)
   const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false)
   const [isSuggestingVideo, setIsSuggestingVideo] = useState(false)
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false)
   const [isProcessingVideoBatch, setIsProcessingVideoBatch] = useState(false)
   const [videoBatchStatus, setVideoBatchStatus] = useState('')
   const [videoError, setVideoError] = useState('')
@@ -114,6 +123,8 @@ export default function Home() {
   const [savedPlans, setSavedPlans] = useState<LearningPlan[]>([])
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
   const autoSuggestedVideoKeysRef = useRef<Set<string>>(new Set())
+  const chatLogRef = useRef<HTMLDivElement | null>(null)
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
 
   const selectedLesson = useMemo(
     () => plan?.lessons.find((lesson) => lesson.id === selectedLessonId) || plan?.lessons[0] || null,
@@ -134,6 +145,11 @@ export default function Home() {
   const videoAnalysis = activeVideoLessonIdKey ? videoAnalysisByLesson[activeVideoLessonIdKey] || null : null
   const videoRecommendation = activeVideoLessonIdKey ? videoRecommendationByLesson[activeVideoLessonIdKey] || null : null
   const activeVideoMatches = activeVideoLesson && videoAnalysis && plan ? selectDistinctVideoMatches(plan.lessons, videoAnalysis, activeVideoLesson.id) : []
+  const activeVideoStartSeconds = activeVideoLessonIdKey ? videoPlayerStartByLesson[activeVideoLessonIdKey] || 0 : 0
+  const activeYoutubeEmbedUrl = videoAnalysis ? youtubeEmbedUrl(videoAnalysis.video.url, activeVideoStartSeconds) : ''
+  const activeQuiz = activeVideoLessonIdKey ? quizByLesson[activeVideoLessonIdKey] || null : null
+  const activeQuizAnswers = activeVideoLessonIdKey ? quizAnswersByLesson[activeVideoLessonIdKey] || {} : {}
+  const activeQuizResult = useMemo(() => (activeQuiz ? buildQuizResult(activeQuiz, activeQuizAnswers) : null), [activeQuiz, activeQuizAnswers])
   const visibleScheduleEvents = scheduleEvents.filter((event) => event.week === activeScheduleWeek)
   const messages = selectedChatLesson ? chatHistoryByLesson[selectedChatLesson.id] || [] : []
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
@@ -168,6 +184,8 @@ export default function Home() {
       setYoutubeUrlByLesson(parsed.youtubeUrlByLesson || legacyLessonMap(restoredPlan, parsed.youtubeUrl || ''))
       setVideoAnalysisByLesson(parsed.videoAnalysisByLesson || legacyLessonMap(restoredPlan, parsed.videoAnalysis || null))
       setVideoRecommendationByLesson(parsed.videoRecommendationByLesson || legacyLessonMap(restoredPlan, parsed.videoRecommendation || null))
+      setQuizByLesson(parsed.quizStorageVersion === quizStorageVersion ? parsed.quizByLesson || {} : {})
+      setQuizAnswersByLesson(parsed.quizStorageVersion === quizStorageVersion ? parsed.quizAnswersByLesson || {} : {})
       setScheduleEvents(Array.isArray(parsed.scheduleEvents) ? parsed.scheduleEvents : restoredPlan ? buildInitialSchedule(restoredPlan.lessons, restoredPlan.profile.learningTimePreference) : [])
       setActiveScheduleWeek(parsed.activeScheduleWeek || restoredPlan?.lessons[0]?.week || 1)
       setChatTopics(Array.isArray(parsed.chatTopics) ? parsed.chatTopics : restoredPlan ? [buildChatTopic(restoredPlan)] : [])
@@ -178,6 +196,10 @@ export default function Home() {
       setHasLoadedStorage(true)
     }
   }, [])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages.length, isAsking, activeChatLessonId])
 
   useEffect(() => {
     if (!hasLoadedStorage) return
@@ -191,6 +213,9 @@ export default function Home() {
       youtubeUrlByLesson,
       videoAnalysisByLesson,
       videoRecommendationByLesson,
+      quizByLesson,
+      quizAnswersByLesson,
+      quizStorageVersion,
       scheduleEvents,
       activeScheduleWeek,
       chatTopics,
@@ -207,6 +232,8 @@ export default function Home() {
     youtubeUrlByLesson,
     videoAnalysisByLesson,
     videoRecommendationByLesson,
+    quizByLesson,
+    quizAnswersByLesson,
     scheduleEvents,
     activeScheduleWeek,
     chatTopics,
@@ -311,10 +338,11 @@ export default function Home() {
     setIsAsking(true)
 
     try {
+      const videoReferences = buildTutorVideoReferences(trimmed, selectedChatLesson, selectedChatTopic, videoAnalysisByLesson)
       const response = await fetch('/api/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed, plan: plan || topicToPlan(selectedChatTopic), lesson: selectedChatLesson, history: currentMessages.slice(-6) })
+        body: JSON.stringify({ question: trimmed, plan: plan || topicToPlan(selectedChatTopic), lesson: selectedChatLesson, history: currentMessages.slice(-6), videoReferences })
       })
       const payload = await response.json()
       setChatHistoryByLesson((current) => ({
@@ -383,7 +411,13 @@ export default function Home() {
     const response = await fetch('/api/videos/suggest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan: sourcePlan, lesson: sourceLesson })
+      body: JSON.stringify({
+        plan: sourcePlan,
+        lesson: sourceLesson,
+        excludedUrls: Object.entries(youtubeUrlByLesson)
+          .filter(([lessonId, url]) => lessonId !== sourceLesson.id && url.trim())
+          .map(([, url]) => url)
+      })
     })
     const payload = await response.json()
 
@@ -399,6 +433,10 @@ export default function Home() {
     setYoutubeUrlByLesson((current) => ({ ...current, [sourceLesson.id]: recommendation.url }))
     setIsSuggestingVideo(false)
     await analyzeVideoUrl(recommendation.url, sourcePlan, sourceLesson)
+  }
+
+  function playVideoAt(lessonId: string, startSeconds: number) {
+    setVideoPlayerStartByLesson((current) => ({ ...current, [lessonId]: Math.max(0, Math.floor(startSeconds)) }))
   }
 
   async function suggestAndAnalyzeAllVideos(sourcePlan = plan) {
@@ -474,6 +512,43 @@ export default function Home() {
     return true
   }
 
+  async function generateLessonQuiz() {
+    if (!plan || !activeVideoLesson) return
+
+    setIsGeneratingQuiz(true)
+    setVideoError('')
+
+    const response = await fetch('/api/quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, lesson: activeVideoLesson, matches: activeVideoMatches })
+    })
+    const payload = await response.json()
+
+    if (!response.ok) {
+      setVideoError(payload.error || 'Không tạo được quiz.')
+    } else {
+      const quiz = payload.quiz as LessonQuiz
+      setQuizByLesson((current) => ({ ...current, [activeVideoLesson.id]: quiz }))
+      setQuizAnswersByLesson((current) => ({ ...current, [activeVideoLesson.id]: {} }))
+      setIsQuizPanelOpen(true)
+      setVideoError('')
+    }
+
+    setIsGeneratingQuiz(false)
+  }
+
+  function chooseQuizAnswer(questionId: string, optionIndex: number) {
+    if (!activeVideoLesson) return
+    setQuizAnswersByLesson((current) => ({
+      ...current,
+      [activeVideoLesson.id]: {
+        ...(current[activeVideoLesson.id] || {}),
+        [questionId]: optionIndex
+      }
+    }))
+  }
+
   function addLessonToSchedule(lesson: Lesson) {
     const start = preferredScheduleStart[plan?.profile.learningTimePreference || profile.learningTimePreference]
     setScheduleEvents((current) => [
@@ -545,6 +620,8 @@ export default function Home() {
     setYoutubeUrlByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setVideoAnalysisByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setVideoRecommendationByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setQuizByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setQuizAnswersByLesson((current) => filterRecordByKeys(current, lessonIds, false))
   }
 
   function deleteSavedPlan(savedPlan: LearningPlan) {
@@ -821,7 +898,7 @@ export default function Home() {
                 </div>
                 <div className="learning-assets">
                   <AssetList icon={<FileQuestion size={15} />} title="Bài tập về nhà" items={selectedLesson.homework} />
-                  <AssetList icon={<Link size={15} />} title="Tài liệu học tập" items={selectedLesson.resources} />
+                  <AssetList icon={<Link size={15} />} title="Tài liệu học tập" items={selectedLesson.recommendedResources?.length ? selectedLesson.recommendedResources : selectedLesson.resources} />
                 </div>
                 <button className="complete-button" type="button" onClick={() => updateLessonStatus(selectedLesson.id, 'done')}>
                   <CheckCircle2 size={16} />
@@ -973,6 +1050,8 @@ export default function Home() {
                   </button>
                 </div>
 
+                <div className="video-study-grid">
+                  <div className="video-study-content">
                 <form className="video-url-form" onSubmit={analyzeVideo}>
                   <input
                     value={youtubeUrl}
@@ -1007,6 +1086,10 @@ export default function Home() {
                     </div>
                     <p>{videoRecommendation.title}</p>
                     <small>{videoRecommendation.reason}</small>
+                    <a className="video-open-link" href={videoRecommendation.url} target="_blank" rel="noreferrer">
+                      <Link size={15} />
+                      Mở video trên YouTube
+                    </a>
                   </div>
                 )}
 
@@ -1019,20 +1102,32 @@ export default function Home() {
                       <small>{videoAnalysis.video.durationMinutes} phút</small>
                     </div>
 
+                    {activeYoutubeEmbedUrl ? (
+                      <div className="video-embed">
+                        <iframe
+                          key={activeYoutubeEmbedUrl}
+                          src={activeYoutubeEmbedUrl}
+                          title={videoAnalysis.video.title}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : null}
+
                     <div className="timestamp-panel">
                       <div>
                         <strong>Đoạn phù hợp với bài đang học</strong>
-                        <a href={videoAnalysis.video.url} target="_blank" rel="noreferrer">Mở video</a>
+                        <span>Phát trực tiếp trong trang</span>
                       </div>
                       {activeVideoMatches.length > 0 ? (
                         activeVideoMatches.map((match) => (
-                          <a className="timestamp-link" href={match.url} key={match.id} target="_blank" rel="noreferrer">
+                          <button className="timestamp-link" key={match.id} type="button" onClick={() => activeVideoLesson && playVideoAt(activeVideoLesson.id, match.startSeconds)}>
                             <strong>{secondsToTimestamp(match.startSeconds)}-{secondsToTimestamp(match.endSeconds)}</strong>
                             <span>
                               <b>{match.title}</b>
                               {match.summary || 'Mở timestamp để xem nội dung chính của đoạn này.'}
                             </span>
-                          </a>
+                          </button>
                         ))
                       ) : (
                         <p>Chưa tìm thấy đoạn đủ liên quan với bài này. Thử video khác hoặc đổi bài học ở sidebar.</p>
@@ -1040,6 +1135,111 @@ export default function Home() {
                     </div>
                   </>
                 ) : null}
+
+                  </div>
+
+                  <aside className={`quiz-panel ${isQuizPanelOpen ? 'expanded' : ''}`}>
+                  <div className="quiz-header">
+                    <div>
+                      <p className="eyebrow">Quiz kiểm tra nhanh</p>
+                      <strong>Tự tạo câu hỏi cho tuần {activeVideoLesson.week}</strong>
+                      <span>{activeQuiz ? `${activeQuiz.questions.length} câu, mỗi câu 4 đáp án.` : 'Mở rộng để tạo và làm quiz.'}</span>
+                    </div>
+                    <div className="quiz-actions">
+                      <button className="secondary-button" type="button" onClick={() => setIsQuizPanelOpen((current) => !current)}>
+                        {isQuizPanelOpen ? 'Thu gọn' : 'Mở rộng'}
+                      </button>
+                      <button className="secondary-button" type="button" disabled={!plan || isGeneratingQuiz} onClick={generateLessonQuiz}>
+                        {isGeneratingQuiz ? <Loader2 className="spin" size={18} /> : <FileQuestion size={18} />}
+                        {activeQuiz ? 'Tạo lại quiz' : 'Tạo quiz'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {isQuizPanelOpen && activeQuiz ? (
+                    <div className="quiz-list">
+                      {activeQuizResult && (
+                        <div className="quiz-result-card">
+                          <div>
+                            <span>Điểm quiz</span>
+                            <strong>{activeQuizResult.scorePercent}%</strong>
+                            <small>
+                              {activeQuizResult.correctCount}/{activeQuizResult.totalQuestions} câu đúng, đã trả lời {activeQuizResult.answeredCount}/{activeQuizResult.totalQuestions} câu.
+                            </small>
+                          </div>
+                          {activeQuizResult.wrongQuestions.length > 0 ? (
+                            <>
+                              <p>Lỗi sai</p>
+                              <ol>
+                                {activeQuizResult.wrongQuestions.map((item) => (
+                                  <li key={item.id}>
+                                    <b>{item.question}</b>
+                                    <span>Bạn chọn: {item.selectedAnswer}</span>
+                                    <span>Đáp án đúng: {item.correctAnswer}</span>
+                                  </li>
+                                ))}
+                              </ol>
+                              <p>Cần học kỹ lại</p>
+                              <ul>
+                                {activeQuizResult.reviewTopics.map((topic) => (
+                                  <li key={topic}>{topic}</li>
+                                ))}
+                              </ul>
+                            </>
+                          ) : activeQuizResult.answeredCount === activeQuizResult.totalQuestions ? (
+                            <p>Bạn đã trả lời đúng tất cả câu hỏi của quiz này.</p>
+                          ) : (
+                            <p>Trả lời hết quiz để xem tổng hợp lỗi sai và phần cần ôn lại.</p>
+                          )}
+                        </div>
+                      )}
+                      {activeQuiz.questions.map((quizQuestion, questionIndex) => {
+                        const selectedIndex = activeQuizAnswers[quizQuestion.id]
+                        const hasAnswered = typeof selectedIndex === 'number'
+                        const isCorrect = hasAnswered && selectedIndex === quizQuestion.correctIndex
+
+                        return (
+                          <div className="quiz-question" key={quizQuestion.id}>
+                            <div className="quiz-question-title">
+                              <span>Câu {questionIndex + 1}</span>
+                              <strong>{quizQuestion.question}</strong>
+                            </div>
+                            <div className="quiz-options">
+                              {quizQuestion.options.map((option, optionIndex) => {
+                                const isSelected = selectedIndex === optionIndex
+                                const isAnswer = hasAnswered && quizQuestion.correctIndex === optionIndex
+                                const optionClass = [
+                                  isSelected ? 'selected' : '',
+                                  isAnswer ? 'correct' : '',
+                                  hasAnswered && isSelected && !isCorrect ? 'wrong' : ''
+                                ]
+                                  .filter(Boolean)
+                                  .join(' ')
+
+                                return (
+                                  <button className={optionClass} key={`${quizQuestion.id}-${optionIndex}`} type="button" onClick={() => chooseQuizAnswer(quizQuestion.id, optionIndex)}>
+                                    <b>{String.fromCharCode(65 + optionIndex)}</b>
+                                    <span>{option}</span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                            {hasAnswered && (
+                              <p className={isCorrect ? 'quiz-feedback correct' : 'quiz-feedback wrong'}>
+                                {isCorrect ? 'Đúng rồi.' : `Chưa đúng. Đáp án đúng là ${String.fromCharCode(65 + quizQuestion.correctIndex)}.`} {quizQuestion.explanation}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : isQuizPanelOpen ? (
+                    <p className="quiz-empty">Tạo quiz sau khi xem video hoặc ngay khi chọn bài học. Nếu đã có timestamp, quiz sẽ ưu tiên nội dung trong các đoạn video phù hợp.</p>
+                  ) : (
+                    <p className="quiz-empty">Quiz đang ở góc phải. Mở rộng khi bạn muốn tự kiểm tra.</p>
+                  )}
+                  </aside>
+                </div>
               </>
             ) : (
               <div className="empty-state">Chọn một bài học để xem video gợi ý.</div>
@@ -1135,7 +1335,7 @@ export default function Home() {
                   <span>{chatMessageCount} tin nhắn</span>
                 </div>
 
-                <div className="chat-log full">
+                <div className="chat-log full" ref={chatLogRef}>
                   {messages.length === 0 ? (
                     <div className="empty-state compact">Chưa có lịch sử chat cho bài học này.</div>
                   ) : (
@@ -1151,6 +1351,7 @@ export default function Home() {
                       Đang trả lời...
                     </div>
                   )}
+                  <div className="chat-scroll-anchor" ref={chatEndRef} />
                 </div>
 
                 <form className="chat-form" onSubmit={askTutor}>
@@ -1358,6 +1559,130 @@ function selectDistinctVideoMatches(lessons: Lesson[], analysis: VideoAnalysis, 
   return []
 }
 
+function buildTutorVideoReferences(
+  question: string,
+  lesson: Lesson,
+  topic: ChatTopic,
+  analysisByLesson: Record<string, VideoAnalysis>
+) {
+  const analysis = analysisByLesson[lesson.id]
+  if (!analysis) return []
+
+  const lessonMatches = selectDistinctVideoMatches(topic.lessons, analysis, lesson.id)
+  const lessonFallbackMatches = analysis.matchesByLessonId[lesson.id] || []
+  const allVideoMatches = analysis.video.segments.map((segment) => ({
+    ...segment,
+    score: 0,
+    url: withYoutubeStartTime(analysis.video.url, segment.startSeconds),
+    videoTitle: analysis.video.title
+  }))
+  const matches = lessonMatches.length > 0 ? lessonMatches : lessonFallbackMatches.length > 0 ? lessonFallbackMatches : allVideoMatches
+
+  return matches
+    .map((match) => ({
+      match,
+      questionScore: scoreVideoReference(question, match)
+    }))
+    .sort((left, right) => right.questionScore - left.questionScore || right.match.score - left.match.score || left.match.startSeconds - right.match.startSeconds)
+    .slice(0, 3)
+    .map(({ match }) => ({
+      timestamp: `${secondsToTimestamp(match.startSeconds)}-${secondsToTimestamp(match.endSeconds)}`,
+      title: match.title,
+      summary: match.summary,
+      url: match.url,
+      videoTitle: match.videoTitle,
+      startSeconds: match.startSeconds,
+      endSeconds: match.endSeconds,
+      excerpt: match.text.slice(0, 700)
+    }))
+}
+
+function scoreVideoReference(question: string, match: VideoSearchMatch) {
+  const queryTokens = new Set(tokenizeSearchText(question))
+  if (queryTokens.size === 0) return 0
+
+  const targetTokens = tokenizeSearchText(`${match.title} ${match.summary} ${match.text}`)
+  return targetTokens.reduce((score, token) => score + (queryTokens.has(token) ? 1 : 0), 0)
+}
+
+function withYoutubeStartTime(value: string, seconds: number) {
+  const url = new URL(value)
+  url.searchParams.set('t', `${Math.floor(seconds)}s`)
+  return url.toString()
+}
+
+function youtubeEmbedUrl(value: string, startSeconds = 0) {
+  const videoId = youtubeVideoId(value)
+  if (!videoId) return ''
+
+  const url = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`)
+  url.searchParams.set('rel', '0')
+  url.searchParams.set('modestbranding', '1')
+  if (startSeconds > 0) url.searchParams.set('start', String(Math.floor(startSeconds)))
+  return url.toString()
+}
+
+function youtubeVideoId(value: string) {
+  if (!value.trim()) return ''
+
+  try {
+    const url = new URL(value)
+    const host = url.hostname.replace(/^www\./, '')
+    if (host === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || ''
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com' || host === 'youtube-nocookie.com') {
+      if (url.pathname.startsWith('/embed/')) return url.pathname.split('/').filter(Boolean)[1] || ''
+      if (url.pathname.startsWith('/shorts/')) return url.pathname.split('/').filter(Boolean)[1] || ''
+      return url.searchParams.get('v') || ''
+    }
+  } catch {
+    return ''
+  }
+
+  return ''
+}
+
+function tokenizeSearchText(value: string) {
+  return normalizeSearchText(value).split(/\s+/).filter((token) => token.length >= 2)
+}
+
+function buildQuizResult(quiz: LessonQuiz, answers: Record<string, number>) {
+  const answeredQuestions = quiz.questions.filter((question) => typeof answers[question.id] === 'number')
+  const wrongQuestions = answeredQuestions
+    .filter((question) => answers[question.id] !== question.correctIndex)
+    .map((question) => ({
+      id: question.id,
+      question: question.question,
+      selectedAnswer: question.options[answers[question.id]] || 'Chưa rõ',
+      correctAnswer: question.options[question.correctIndex] || 'Chưa rõ',
+      explanation: question.explanation
+    }))
+  const correctCount = answeredQuestions.length - wrongQuestions.length
+  const totalQuestions = quiz.questions.length || 1
+  const reviewTopics = Array.from(
+    new Set(
+      wrongQuestions.map((item) => {
+        const hint = item.explanation || item.correctAnswer || item.question
+        return clampText(hint, 120)
+      })
+    )
+  ).slice(0, 5)
+
+  return {
+    totalQuestions,
+    answeredCount: answeredQuestions.length,
+    correctCount,
+    scorePercent: Math.round((correctCount / totalQuestions) * 100),
+    wrongQuestions,
+    reviewTopics
+  }
+}
+
+function clampText(value: string, limit: number) {
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  if (normalized.length <= limit) return normalized
+  return `${normalized.slice(0, limit - 3).trim()}...`
+}
+
 function stableTopicId(profile: LearnerProfile) {
   return slugify(`${profile.topic}-${profile.goal}`)
 }
@@ -1453,9 +1778,18 @@ function formatAssetItem(item: unknown) {
 
   if (item && typeof item === 'object') {
     const record = item as Record<string, unknown>
-    const title = firstString(record.title, record.name, record.text, record.label, record.description, record.reason)
+    const title = firstString(record.title, record.name, record.text, record.label, record.description, record.reason, record.searchKeyword)
     const url = firstString(record.url, record.link, record.href)
+    const detailParts = [
+      firstString(record.type) ? `[${firstString(record.type)}]` : '',
+      title,
+      firstString(record.primaryLanguage) ? `Ngôn ngữ: ${firstString(record.primaryLanguage)}` : '',
+      Array.isArray(record.englishKeywords) && record.englishKeywords.length ? `EN: ${record.englishKeywords.map(String).slice(0, 3).join(', ')}` : '',
+      Array.isArray(record.vietnameseKeywords) && record.vietnameseKeywords.length ? `VI: ${record.vietnameseKeywords.map(String).slice(0, 3).join(', ')}` : '',
+      firstString(record.whyRecommended)
+    ].filter(Boolean)
 
+    if (detailParts.length) return { text: detailParts.join(' - '), url: url || undefined }
     if (title && url) return { text: title, url }
     if (title) return { text: title }
     if (url) return { text: url, url }
@@ -1616,9 +1950,17 @@ function cleanAssistantLine(line: string) {
 }
 
 function renderInlineMarkdown(text: string): ReactNode[] {
-  const parts = cleanAssistantLine(text).split(/(`[^`]+`|\*\*[^*]+\*\*)/g)
+  const parts = cleanAssistantLine(text).split(/(https?:\/\/[^\s)]+|`[^`]+`|\*\*[^*]+\*\*)/g)
 
   return parts.map((part, index) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a href={part} key={index} target="_blank" rel="noreferrer">
+          {part}
+        </a>
+      )
+    }
+
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={index}>{part.slice(2, -2)}</strong>
     }

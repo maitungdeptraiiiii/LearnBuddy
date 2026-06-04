@@ -1,0 +1,1464 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "682114df94f262523e55adc1bc1a2f8b60030668",
+  "generatedAt": "2026-06-04T04:21:36.403Z",
+  "files": {
+    ".dockerignore": {
+      "filePath": ".dockerignore",
+      "contentHash": "6ab132f64f4e9a1bf827da340cd1ea208294e90b342ea827164e3dbd3dc19b18",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": false
+    },
+    ".env.example": {
+      "filePath": ".env.example",
+      "contentHash": "fb6ec75b5b5fc254c7d0faf486288287df5e9b8b00ed3b3c897ae5ac3db696fb",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    ".understand-anything/.understandignore": {
+      "filePath": ".understand-anything/.understandignore",
+      "contentHash": "2ab9a05b6cae2ad1fa39fbc23a731e9ca9eaa3872d2a0d68c3c7df286347a008",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": false
+    },
+    "app/api/plan/route.ts": {
+      "filePath": "app/api/plan/route.ts",
+      "contentHash": "a325b0ed5cc7c3437861884dbe7ca1dfac66c531a0e9a4eafd60420ea7e001bc",
+      "functions": [
+        {
+          "name": "POST",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "hasRepeatedLessons",
+          "params": [
+            "plan"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "normalizeLearningPlan",
+          "params": [
+            "parsed",
+            "profile"
+          ],
+          "returnType": "Promise<LearningPlan>",
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "normalizeLearningTimePreference",
+          "params": [
+            "value"
+          ],
+          "returnType": "LearnerProfile['learningTimePreference']",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "normalizeVideoLanguage",
+          "params": [
+            "value"
+          ],
+          "returnType": "LearnerProfile['videoLanguage']",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "normalizePrerequisites",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "normalizeStringList",
+          "params": [
+            "value",
+            "fallback"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "normalizePrerequisiteGraph",
+          "params": [
+            "value",
+            "prerequisites",
+            "topic"
+          ],
+          "returnType": "PrerequisiteRelationship[]",
+          "exported": false,
+          "lineCount": 24
+        },
+        {
+          "name": "normalizeRecommendedWeeks",
+          "params": [
+            "value",
+            "profile"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "normalizeDurationAdvice",
+          "params": [
+            "value",
+            "selectedWeeks",
+            "recommendedWeeks"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "normalizeLesson",
+          "params": [
+            "rawLesson",
+            "index",
+            "profile"
+          ],
+          "returnType": "Promise<Lesson>",
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "normalizePacing",
+          "params": [
+            "pacing",
+            "index",
+            "profile"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "normalizeStatus",
+          "params": [
+            "status"
+          ],
+          "returnType": "LessonStatus",
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "next/server",
+          "specifiers": [
+            "NextResponse"
+          ]
+        },
+        {
+          "source": "@/lib/fallback-plan",
+          "specifiers": [
+            "estimateRecommendedWeeks",
+            "generateFallbackPlan"
+          ]
+        },
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "LearnerProfile",
+            "LearningPlan",
+            "Lesson",
+            "LessonStatus",
+            "PrerequisiteRelationship"
+          ]
+        },
+        {
+          "source": "@/lib/law-rag-llm",
+          "specifiers": [
+            "lawRagChatJson"
+          ]
+        }
+      ],
+      "exports": [
+        "POST"
+      ],
+      "totalLines": 172,
+      "hasStructuralAnalysis": true
+    },
+    "app/api/tutor/route.ts": {
+      "filePath": "app/api/tutor/route.ts",
+      "contentHash": "4e1975f623f364ccc1450e850f6a26bfd510ffab2c953e01c394ed494fed348e",
+      "functions": [
+        {
+          "name": "POST",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "fallbackTutorAnswer",
+          "params": [
+            "question",
+            "lesson"
+          ],
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "next/server",
+          "specifiers": [
+            "NextResponse"
+          ]
+        },
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "ChatMessage",
+            "LearningPlan",
+            "Lesson"
+          ]
+        },
+        {
+          "source": "@/lib/law-rag-llm",
+          "specifiers": [
+            "lawRagChatText"
+          ]
+        }
+      ],
+      "exports": [
+        "POST"
+      ],
+      "totalLines": 36,
+      "hasStructuralAnalysis": true
+    },
+    "app/api/videos/analyze/route.ts": {
+      "filePath": "app/api/videos/analyze/route.ts",
+      "contentHash": "4f1531a29d5a7ef4a40aa3d26d7ef03e4c43b4053e610a65bd9d5573b8255bff",
+      "functions": [
+        {
+          "name": "POST",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "next/server",
+          "specifiers": [
+            "NextResponse"
+          ]
+        },
+        {
+          "source": "@/lib/video-index",
+          "specifiers": [
+            "analyzeYoutubeVideo"
+          ]
+        },
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "Lesson",
+            "VideoLanguage"
+          ]
+        }
+      ],
+      "exports": [
+        "POST"
+      ],
+      "totalLines": 20,
+      "hasStructuralAnalysis": true
+    },
+    "app/api/videos/suggest-shared/route.ts": {
+      "filePath": "app/api/videos/suggest-shared/route.ts",
+      "contentHash": "2bc91e325c1fa164bc4cf7aee081ae3b80f119c6ce3afc6ead9048780320d342",
+      "functions": [
+        {
+          "name": "POST",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "next/server",
+          "specifiers": [
+            "NextResponse"
+          ]
+        },
+        {
+          "source": "@/lib/video-index",
+          "specifiers": [
+            "suggestPlanWideYoutubeVideo"
+          ]
+        },
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "LearningPlan"
+          ]
+        }
+      ],
+      "exports": [
+        "POST"
+      ],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "app/api/videos/suggest/route.ts": {
+      "filePath": "app/api/videos/suggest/route.ts",
+      "contentHash": "fa3bec977418f6c324321ae5ce2c7b18cd1062967a1deed13178b4bb4b76a038",
+      "functions": [
+        {
+          "name": "POST",
+          "params": [
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "next/server",
+          "specifiers": [
+            "NextResponse"
+          ]
+        },
+        {
+          "source": "@/lib/video-index",
+          "specifiers": [
+            "suggestYoutubeVideo"
+          ]
+        },
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "LearningPlan",
+            "Lesson"
+          ]
+        }
+      ],
+      "exports": [
+        "POST"
+      ],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "app/globals.css": {
+      "filePath": "app/globals.css",
+      "contentHash": "d825824e27ad536d87799b0e0980ca9c69205048f3ffa142ed4b151d64ee2b5b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1421,
+      "hasStructuralAnalysis": false
+    },
+    "app/layout.tsx": {
+      "filePath": "app/layout.tsx",
+      "contentHash": "a3e35a4edb68618c58674bd2e26de19fa3ea9347330992c8bc1b33949ae6208a",
+      "functions": [
+        {
+          "name": "RootLayout",
+          "params": [
+            "{ children }"
+          ],
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "next",
+          "specifiers": [
+            "Metadata"
+          ]
+        },
+        {
+          "source": "./globals.css",
+          "specifiers": []
+        }
+      ],
+      "exports": [
+        "metadata",
+        "RootLayout"
+      ],
+      "totalLines": 16,
+      "hasStructuralAnalysis": true
+    },
+    "app/page.tsx": {
+      "filePath": "app/page.tsx",
+      "contentHash": "e3be2415c296c290ab6768dd94bb93a11cb13fb4d50c40d4b041bc6f645cfb16",
+      "functions": [
+        {
+          "name": "Home",
+          "params": [],
+          "exported": true,
+          "lineCount": 1086
+        },
+        {
+          "name": "buildChatTopic",
+          "params": [
+            "plan"
+          ],
+          "returnType": "ChatTopic",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "upsertChatTopic",
+          "params": [
+            "current",
+            "nextTopic"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "topicToPlan",
+          "params": [
+            "topic"
+          ],
+          "returnType": "LearningPlan",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "upsertSavedPlan",
+          "params": [
+            "current",
+            "nextPlan"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "omitRecordKey",
+          "params": [
+            "record",
+            "key"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "filterRecordByKeys",
+          "params": [
+            "record",
+            "keys",
+            "keepMatching"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "legacyLessonMap",
+          "params": [
+            "plan",
+            "value"
+          ],
+          "returnType": "Record<string, T>",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "planStorageId",
+          "params": [
+            "plan"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "videoJobKey",
+          "params": [
+            "plan",
+            "lesson"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "normalizeLoadedPlan",
+          "params": [
+            "plan"
+          ],
+          "returnType": "LearningPlan",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "isLearningPlanLike",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "normalizeLoadedProfile",
+          "params": [
+            "profile"
+          ],
+          "returnType": "LearnerProfile",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "normalizeLessonList",
+          "params": [
+            "lessons",
+            "profile"
+          ],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "buildInitialSchedule",
+          "params": [
+            "lessons",
+            "preference"
+          ],
+          "returnType": "ScheduleEvent[]",
+          "exported": false,
+          "lineCount": 43
+        },
+        {
+          "name": "addMinutesToTime",
+          "params": [
+            "value",
+            "minutes"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "secondsToTimestamp",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "selectDistinctVideoMatches",
+          "params": [
+            "lessons",
+            "analysis",
+            "activeLessonId"
+          ],
+          "returnType": "VideoSearchMatch[]",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "stableTopicId",
+          "params": [
+            "profile"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "shouldSuggestTopic",
+          "params": [
+            "topic",
+            "query"
+          ],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "normalizeSearchText",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "pacingLabel",
+          "params": [
+            "pacing"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "slugify",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "isLessonSupportMessage",
+          "params": [
+            "message"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "buildLessonSupportMessage",
+          "params": [
+            "lesson"
+          ],
+          "returnType": "ChatMessage",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "AssetList",
+          "params": [
+            "{ icon, title, items }"
+          ],
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "formatAssetItem",
+          "params": [
+            "item"
+          ],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "formatStringAssetItem",
+          "params": [
+            "item"
+          ],
+          "returnType": "FormattedAssetItem | null",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "firstString",
+          "params": [
+            "...values"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "AssistantMessage",
+          "params": [
+            "{ content }"
+          ],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "parseMessageBlocks",
+          "params": [
+            "content"
+          ],
+          "returnType": "MessageBlock[]",
+          "exported": false,
+          "lineCount": 76
+        },
+        {
+          "name": "normalizeAssistantContent",
+          "params": [
+            "content"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "cleanAssistantLine",
+          "params": [
+            "line"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "renderInlineMarkdown",
+          "params": [
+            "text"
+          ],
+          "returnType": "ReactNode[]",
+          "exported": false,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "react",
+          "specifiers": [
+            "Fragment",
+            "useEffect",
+            "useMemo",
+            "useRef",
+            "useState"
+          ]
+        },
+        {
+          "source": "react",
+          "specifiers": [
+            "DragEvent",
+            "FormEvent",
+            "ReactNode"
+          ]
+        },
+        {
+          "source": "lucide-react",
+          "specifiers": [
+            "BookOpen",
+            "CalendarDays",
+            "CheckCircle2",
+            "Clock",
+            "FileQuestion",
+            "GripVertical",
+            "Link",
+            "Loader2",
+            "MessageSquareText",
+            "PlaySquare",
+            "RotateCcw",
+            "Sparkles",
+            "Trash2"
+          ]
+        },
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "ChatMessage",
+            "LearnerProfile",
+            "LearningPlan",
+            "Lesson",
+            "LessonStatus",
+            "VideoAnalysis",
+            "VideoRecommendation",
+            "VideoSearchMatch"
+          ]
+        }
+      ],
+      "exports": [
+        "Home"
+      ],
+      "totalLines": 1633,
+      "hasStructuralAnalysis": true
+    },
+    "Dockerfile": {
+      "filePath": "Dockerfile",
+      "contentHash": "c4aadee54ee4b1a793c5d6a83a39c3a01ebc29f24b5935e2fce693b96703ce79",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "lib/fallback-plan.ts": {
+      "filePath": "lib/fallback-plan.ts",
+      "contentHash": "abfe1321473a4cddc69c444104325d055c5d3d1146ab613dd6ca82e47f0e1464",
+      "functions": [
+        {
+          "name": "estimateRecommendedWeeks",
+          "params": [
+            "profile"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "generateFallbackPlan",
+          "params": [
+            "profile"
+          ],
+          "returnType": "LearningPlan",
+          "exported": true,
+          "lineCount": 34
+        },
+        {
+          "name": "normalizeVideoLanguage",
+          "params": [
+            "value"
+          ],
+          "returnType": "LearnerProfile['videoLanguage']",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "getLessonPacing",
+          "params": [
+            "index",
+            "selectedWeeks",
+            "recommendedWeeks"
+          ],
+          "returnType": "LessonPacing",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "buildDurationAdvice",
+          "params": [
+            "selectedWeeks",
+            "recommendedWeeks"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "buildPrerequisiteGraph",
+          "params": [
+            "prerequisites",
+            "topic"
+          ],
+          "returnType": "PrerequisiteRelationship[]",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "analyzeTopic",
+          "params": [
+            "topic"
+          ],
+          "returnType": "TopicProfile",
+          "exported": false,
+          "lineCount": 57
+        },
+        {
+          "name": "recommendWeeks",
+          "params": [
+            "profile",
+            "topicProfile"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "buildPhases",
+          "params": [
+            "profile",
+            "totalWeeks",
+            "topicProfile"
+          ],
+          "returnType": "PlanPhase[]",
+          "exported": false,
+          "lineCount": 32
+        },
+        {
+          "name": "phaseSequence",
+          "params": [
+            "level",
+            "goalFocus",
+            "area"
+          ],
+          "returnType": "PhaseTemplate[]",
+          "exported": false,
+          "lineCount": 66
+        },
+        {
+          "name": "buildActivities",
+          "params": [
+            "profile",
+            "topicProfile",
+            "index",
+            "totalWeeks",
+            "durationAdvice"
+          ],
+          "returnType": "string[]",
+          "exported": false,
+          "lineCount": 19
+        },
+        {
+          "name": "buildHomework",
+          "params": [
+            "profile",
+            "phase",
+            "index"
+          ],
+          "returnType": "string[]",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "buildResources",
+          "params": [
+            "profile",
+            "topicProfile",
+            "phase",
+            "index"
+          ],
+          "returnType": "string[]",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "buildKhanAcademyUrl",
+          "params": [
+            "query"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "buildQuiz",
+          "params": [
+            "profile",
+            "phase",
+            "index"
+          ],
+          "returnType": "string[]",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "detectGoalFocus",
+          "params": [
+            "goal"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "isAmbitiousGoal",
+          "params": [
+            "goal"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "includesAny",
+          "params": [
+            "value",
+            "keywords"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "clean",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "slugify",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 8
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "LearnerProfile",
+            "LearningPlan",
+            "Lesson",
+            "PrerequisiteRelationship"
+          ]
+        }
+      ],
+      "exports": [
+        "estimateRecommendedWeeks",
+        "generateFallbackPlan"
+      ],
+      "totalLines": 364,
+      "hasStructuralAnalysis": true
+    },
+    "lib/law-rag-llm.ts": {
+      "filePath": "lib/law-rag-llm.ts",
+      "contentHash": "0c6598f850a5eb675906f6c610321b669ba2855a72ab6433177a7b25eb8b6b22",
+      "functions": [
+        {
+          "name": "getLawRagRuntime",
+          "params": [],
+          "returnType": "LawRagRuntime | null",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "lawRagChatText",
+          "params": [
+            "messages",
+            "temperature"
+          ],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "lawRagChatJson",
+          "params": [
+            "messages",
+            "temperature"
+          ],
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "chatCompletions",
+          "params": [
+            "runtime",
+            "body"
+          ],
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "loadLawRagEnv",
+          "params": [],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "value",
+          "params": [
+            "env",
+            "key",
+            "fallback"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "parseJsonObject",
+          "params": [
+            "content"
+          ],
+          "exported": false,
+          "lineCount": 15
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:fs",
+          "specifiers": [
+            "readFileSync"
+          ]
+        },
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        }
+      ],
+      "exports": [
+        "getLawRagRuntime",
+        "lawRagChatText",
+        "lawRagChatJson"
+      ],
+      "totalLines": 141,
+      "hasStructuralAnalysis": true
+    },
+    "lib/types.ts": {
+      "filePath": "lib/types.ts",
+      "contentHash": "208895a010e5e05adf06b2dd1e95058b13a53872fc8aea1473eac499506e0c24",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 94,
+      "hasStructuralAnalysis": true
+    },
+    "lib/video-index.ts": {
+      "filePath": "lib/video-index.ts",
+      "contentHash": "2927f67ea368793adfaace57fc0447ddaef467c357ced0230f43062d69fa3918",
+      "functions": [
+        {
+          "name": "analyzeYoutubeVideo",
+          "params": [
+            "url",
+            "lessons",
+            "language"
+          ],
+          "returnType": "Promise<VideoAnalysis>",
+          "exported": true,
+          "lineCount": 30
+        },
+        {
+          "name": "suggestYoutubeVideo",
+          "params": [
+            "plan",
+            "lesson"
+          ],
+          "returnType": "Promise<VideoRecommendation>",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "suggestPlanWideYoutubeVideo",
+          "params": [
+            "plan"
+          ],
+          "returnType": "Promise<VideoRecommendation | null>",
+          "exported": true,
+          "lineCount": 52
+        },
+        {
+          "name": "searchVideoSegments",
+          "params": [
+            "video",
+            "query",
+            "limit"
+          ],
+          "returnType": "VideoSearchMatch[]",
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "buildDistinctMatchesByLesson",
+          "params": [
+            "video",
+            "lessons"
+          ],
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "filterRelevantVideoMatches",
+          "params": [
+            "matches"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "lessonQuery",
+          "params": [
+            "lesson"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "getYoutubeInfo",
+          "params": [
+            "url",
+            "language"
+          ],
+          "returnType": "Promise<YtDlpInfo>",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "buildVideoSearchQuery",
+          "params": [
+            "plan",
+            "lesson"
+          ],
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "searchYoutubeCandidates",
+          "params": [
+            "query",
+            "limit"
+          ],
+          "returnType": "Promise<Array<YtDlpInfo & { reason?: string }>>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "pickVideoCandidate",
+          "params": [
+            "plan",
+            "lesson",
+            "query",
+            "candidates"
+          ],
+          "returnType": "Promise<YtDlpInfo & { reason?: string }>",
+          "exported": false,
+          "lineCount": 48
+        },
+        {
+          "name": "getTranscript",
+          "params": [
+            "info",
+            "language"
+          ],
+          "returnType": "Promise<TranscriptItem[]>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "pickSubtitleUrl",
+          "params": [
+            "info",
+            "language"
+          ],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "pickSubtitleFormat",
+          "params": [
+            "entries"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "parseJson3Transcript",
+          "params": [
+            "payload"
+          ],
+          "returnType": "TranscriptItem[]",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "parseVttTranscript",
+          "params": [
+            "content"
+          ],
+          "returnType": "TranscriptItem[]",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "chunkTranscript",
+          "params": [
+            "items"
+          ],
+          "returnType": "TranscriptItem[]",
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "titleTranscriptChunks",
+          "params": [
+            "chunks",
+            "videoTitle"
+          ],
+          "returnType": "Promise<Array<TranscriptItem & { title: string; summary: string }>>",
+          "exported": false,
+          "lineCount": 52
+        },
+        {
+          "name": "embedText",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "tokenize",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "hashToken",
+          "params": [
+            "token"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "cosineSimilarity",
+          "params": [
+            "left",
+            "right"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "clampWords",
+          "params": [
+            "text",
+            "limit"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "withYoutubeStartTime",
+          "params": [
+            "value",
+            "seconds"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "canonicalYoutubeUrl",
+          "params": [
+            "videoId"
+          ],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "timestampToSeconds",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "secondsToTimestamp",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "stableId",
+          "params": [
+            "value"
+          ],
+          "exported": false,
+          "lineCount": 3
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "node:path",
+          "specifiers": [
+            "join"
+          ]
+        },
+        {
+          "source": "yt-dlp-exec",
+          "specifiers": [
+            "ytdlpExec"
+          ]
+        },
+        {
+          "source": "yt-dlp-exec",
+          "specifiers": [
+            "createYtDlp"
+          ]
+        },
+        {
+          "source": "@/lib/law-rag-llm",
+          "specifiers": [
+            "lawRagChatJson"
+          ]
+        },
+        {
+          "source": "@/lib/types",
+          "specifiers": [
+            "LearningPlan",
+            "Lesson",
+            "VideoAnalysis",
+            "VideoIndex",
+            "VideoLanguage",
+            "VideoRecommendation",
+            "VideoSearchMatch",
+            "VideoTranscriptSegment"
+          ]
+        }
+      ],
+      "exports": [
+        "analyzeYoutubeVideo",
+        "suggestYoutubeVideo",
+        "suggestPlanWideYoutubeVideo",
+        "searchVideoSegments"
+      ],
+      "totalLines": 499,
+      "hasStructuralAnalysis": true
+    },
+    "next-env.d.ts": {
+      "filePath": "next-env.d.ts",
+      "contentHash": "85ae5aee75f011967cf2d25cbc342f62d69314e9d925f7f4aa3456fc2cffcca6",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 7,
+      "hasStructuralAnalysis": true
+    },
+    "next.config.mjs": {
+      "filePath": "next.config.mjs",
+      "contentHash": "28d835e154b75122f8b384ec662e6b1e35f97629ea679082844211c0b0c589bd",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "package.json": {
+      "filePath": "package.json",
+      "contentHash": "670df0ce6cfdc0bfea6ceee59a6404decb4e6d0eb4e192abda1479ee0b20afc7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 27,
+      "hasStructuralAnalysis": true
+    },
+    "public/.gitkeep": {
+      "filePath": "public/.gitkeep",
+      "contentHash": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": false
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "3bf5074180e632a2a26f35abd5c64dac028f2f835666b798834928df298aad15",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 75,
+      "hasStructuralAnalysis": true
+    },
+    "tsconfig.json": {
+      "filePath": "tsconfig.json",
+      "contentHash": "2c88f053f84bead097223eaef335210d402b292c433752bf7c9ccf21bc931e73",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    }
+  }
+}
