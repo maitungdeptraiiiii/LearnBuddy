@@ -41,6 +41,9 @@ const statusLabel: Record<LessonStatus, string> = {
 
 const scheduleDays = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
 const scheduleSlots = ['07:00', '08:30', '10:00', '12:00', '14:00', '15:30', '17:00', '19:00', '20:30']
+const dayTimelineSlots = Array.from({ length: 18 }, (_, index) => `${String(index + 6).padStart(2, '0')}:00`)
+const monthDayVisibleEventLimit = 3
+const scheduleBaseMonday = startOfWeek(new Date())
 const preferredScheduleStart = {
   morning: '07:00',
   noon: '12:00',
@@ -52,7 +55,16 @@ const storageKey = 'learnmate-app-state-v2'
 const quizStorageVersion = 2
 
 type AppView = 'plan' | 'schedule' | 'videos' | 'quiz' | 'chat'
+type CalendarViewMode = 'month' | 'week' | 'day'
 type ChatHistoryByLesson = Record<string, ChatMessage[]>
+type ChatSession = {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  messages: ChatMessage[]
+}
+type ChatSessionsByLesson = Record<string, ChatSession[]>
 type ScheduleEvent = {
   id: string
   planId?: string
@@ -63,8 +75,16 @@ type ScheduleEvent = {
   day: string
   start: string
   end: string
-  kind: 'study' | 'review' | 'practice'
+  kind: 'study' | 'review' | 'practice' | 'revision'
+  note?: string
+  status?: 'planned' | 'done' | 'skipped'
 }
+const scheduleKindOptions: Array<{ id: ScheduleEvent['kind']; label: string }> = [
+  { id: 'study', label: 'Bài học' },
+  { id: 'review', label: 'Quiz' },
+  { id: 'practice', label: 'Thực hành' },
+  { id: 'revision', label: 'Ôn tập' }
+]
 type ChatTopic = {
   id: string
   topic: string
@@ -79,6 +99,7 @@ type PersistedAppState = {
   plan: LearningPlan | null
   savedPlans: LearningPlan[]
   selectedLessonId: string | null
+  activeVideoPlanId?: string | null
   activeVideoLessonId: string | null
   youtubeUrlByLesson: Record<string, string>
   videoAnalysisByLesson: Record<string, VideoAnalysis>
@@ -92,8 +113,11 @@ type PersistedAppState = {
   videoRecommendation?: VideoRecommendation | null
   scheduleEvents: ScheduleEvent[]
   activeScheduleWeek: number
+  activeSchedulePlanId?: string | null
   chatTopics: ChatTopic[]
   chatHistoryByLesson: ChatHistoryByLesson
+  chatSessionsByLesson?: ChatSessionsByLesson
+  activeChatSessionIdByLesson?: Record<string, string>
 }
 
 export default function Home() {
@@ -103,6 +127,19 @@ export default function Home() {
   const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null)
   const [scheduleEvents, setScheduleEvents] = useState<ScheduleEvent[]>([])
   const [activeScheduleWeek, setActiveScheduleWeek] = useState(1)
+  const [activeSchedulePlanId, setActiveSchedulePlanId] = useState<string | null>(null)
+  const [calendarMonthDate, setCalendarMonthDate] = useState(startOfMonth(new Date()))
+  const [selectedScheduleDate, setSelectedScheduleDate] = useState(new Date())
+  const [editingScheduleEvent, setEditingScheduleEvent] = useState<ScheduleEvent | null>(null)
+  const [calendarViewMode, setCalendarViewMode] = useState<CalendarViewMode>('month')
+  const [scheduleCourseFilters, setScheduleCourseFilters] = useState<Record<string, boolean>>({})
+  const [scheduleKindFilters, setScheduleKindFilters] = useState<Record<ScheduleEvent['kind'], boolean>>({
+    study: true,
+    review: true,
+    practice: true,
+    revision: true
+  })
+  const [activeVideoPlanId, setActiveVideoPlanId] = useState<string | null>(null)
   const [activeVideoLessonId, setActiveVideoLessonId] = useState<string | null>(null)
   const [youtubeUrlByLesson, setYoutubeUrlByLesson] = useState<Record<string, string>>({})
   const [videoAnalysisByLesson, setVideoAnalysisByLesson] = useState<Record<string, VideoAnalysis>>({})
@@ -122,16 +159,24 @@ export default function Home() {
   const [activeChatLessonId, setActiveChatLessonId] = useState<string | null>(null)
   const [chatTopics, setChatTopics] = useState<ChatTopic[]>([])
   const [chatHistoryByLesson, setChatHistoryByLesson] = useState<ChatHistoryByLesson>({})
+  const [chatSessionsByLesson, setChatSessionsByLesson] = useState<ChatSessionsByLesson>({})
+  const [activeChatSessionIdByLesson, setActiveChatSessionIdByLesson] = useState<Record<string, string>>({})
   const [question, setQuestion] = useState('')
-  const [videoQuestion, setVideoQuestion] = useState('')
+  const [profileError, setProfileError] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAsking, setIsAsking] = useState(false)
   const [savedPlans, setSavedPlans] = useState<LearningPlan[]>([])
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
+  const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false)
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
   const [isTopicInputFocused, setIsTopicInputFocused] = useState(false)
   const [expandedScheduleTopicIds, setExpandedScheduleTopicIds] = useState<Record<string, boolean>>({})
+  const [expandedVideoTopicIds, setExpandedVideoTopicIds] = useState<Record<string, boolean>>({})
+  const [expandedQuizTopicIds, setExpandedQuizTopicIds] = useState<Record<string, boolean>>({})
   const [expandedChatTopicIds, setExpandedChatTopicIds] = useState<Record<string, boolean>>({})
   const autoSuggestedVideoKeysRef = useRef<Set<string>>(new Set())
+  const enrichedResourcePlanIdsRef = useRef<Set<string>>(new Set())
+  const monthDragSwitchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const chatLogRef = useRef<HTMLDivElement | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
 
@@ -145,17 +190,26 @@ export default function Home() {
     () => selectedChatTopic?.lessons.find((lesson) => lesson.id === activeChatLessonId) || selectedChatTopic?.lessons[0] || null,
     [selectedChatTopic, activeChatLessonId]
   )
+  const schedulePlans = useMemo(() => {
+    const plans = plan ? upsertSavedPlan(savedPlans, plan) : savedPlans
+    return plans.map(normalizeLoadedPlan)
+  }, [savedPlans, plan])
+  const activeVideoPlan = useMemo(
+    () => schedulePlans.find((item) => planStorageId(item) === activeVideoPlanId) || schedulePlans[0] || null,
+    [schedulePlans, activeVideoPlanId]
+  )
   const activeVideoLesson = useMemo(
-    () => plan?.lessons.find((lesson) => lesson.id === activeVideoLessonId) || plan?.lessons[0] || null,
-    [plan, activeVideoLessonId]
+    () => activeVideoPlan?.lessons.find((lesson) => lesson.id === activeVideoLessonId) || activeVideoPlan?.lessons[0] || null,
+    [activeVideoPlan, activeVideoLessonId]
   )
   const activeVideoLessonIdKey = activeVideoLesson?.id || ''
-  const youtubeUrl = activeVideoLessonIdKey ? youtubeUrlByLesson[activeVideoLessonIdKey] || '' : ''
-  const videoAnalysis = activeVideoLessonIdKey ? videoAnalysisByLesson[activeVideoLessonIdKey] || null : null
-  const videoRecommendation = activeVideoLessonIdKey ? videoRecommendationByLesson[activeVideoLessonIdKey] || null : null
-  const activeVideoMatches = activeVideoLesson && videoAnalysis && plan ? selectDistinctVideoMatches(plan.lessons, videoAnalysis, activeVideoLesson.id) : []
+  const activeVideoStateKey = activeVideoPlan && activeVideoLesson ? videoStateKey(activeVideoPlan, activeVideoLesson) : ''
+  const youtubeUrl = activeVideoPlan && activeVideoLesson ? getLessonScopedValue(youtubeUrlByLesson, activeVideoPlan, activeVideoLesson, '') : ''
+  const videoAnalysis = activeVideoPlan && activeVideoLesson ? getLessonScopedValue<VideoAnalysis | null>(videoAnalysisByLesson, activeVideoPlan, activeVideoLesson, null) : null
+  const videoRecommendation = activeVideoPlan && activeVideoLesson ? getLessonScopedValue<VideoRecommendation | null>(videoRecommendationByLesson, activeVideoPlan, activeVideoLesson, null) : null
+  const activeVideoMatches = activeVideoLesson && videoAnalysis && activeVideoPlan ? selectDistinctVideoMatches(activeVideoPlan.lessons, videoAnalysis, activeVideoLesson.id) : []
   const activeQuizVideoMatches = activeVideoLesson && videoAnalysis ? buildQuizVideoMatches(videoAnalysis, activeVideoLesson.id, activeVideoMatches) : []
-  const activeVideoStartSeconds = activeVideoLessonIdKey ? videoPlayerStartByLesson[activeVideoLessonIdKey] || 0 : 0
+  const activeVideoStartSeconds = activeVideoStateKey ? videoPlayerStartByLesson[activeVideoStateKey] || 0 : 0
   const activeYoutubeEmbedUrl = videoAnalysis ? youtubeEmbedUrl(videoAnalysis.video.url, activeVideoStartSeconds) : ''
   const activeQuiz = activeVideoLessonIdKey ? quizByLesson[activeVideoLessonIdKey] || null : null
   const activeQuizAnswers = activeVideoLessonIdKey ? quizAnswersByLesson[activeVideoLessonIdKey] || {} : {}
@@ -163,10 +217,6 @@ export default function Home() {
   const isActiveQuizStarted = activeQuizSessionLessonId === activeVideoLessonIdKey
   const isActiveQuizSubmitted = activeVideoLessonIdKey ? Boolean(quizSubmittedByLesson[activeVideoLessonIdKey]) : false
   const canCompleteActiveQuiz = Boolean(activeQuiz && activeQuizResult && activeQuizResult.answeredCount === activeQuizResult.totalQuestions)
-  const schedulePlans = useMemo(() => {
-    const plans = plan ? upsertSavedPlan(savedPlans, plan) : savedPlans
-    return plans.map(normalizeLoadedPlan)
-  }, [savedPlans, plan])
   const scheduleLessons = schedulePlans.flatMap((item) =>
     item.lessons.map((lesson) => ({
       plan: item,
@@ -174,11 +224,24 @@ export default function Home() {
     }))
   )
   const scheduleWeeks = Array.from(new Set(scheduleLessons.map((item) => item.lesson.week))).sort((a, b) => a - b)
-  const visibleScheduleEvents = scheduleEvents.filter((event) => event.week === activeScheduleWeek)
+  const activeSchedulePlan = schedulePlans.find((item) => planStorageId(item) === activeSchedulePlanId) || null
+  const filteredScheduleEvents = scheduleEvents.filter((event) => {
+    const isCourseVisible = !event.planId || scheduleCourseFilters[event.planId] !== false
+    const isKindVisible = scheduleKindFilters[event.kind] !== false
+    return isCourseVisible && isKindVisible
+  })
+  const calendarMonth = buildMonthCalendar(calendarMonthDate, filteredScheduleEvents)
+  const selectedDayEvents = filteredScheduleEvents
+    .filter((event) => sameDate(scheduleEventDate(event), selectedScheduleDate))
+    .sort((left, right) => left.start.localeCompare(right.start))
+  const selectedWeekDates = buildScheduleWeekDates(activeScheduleWeek)
   const isQuizInProgress = Boolean(activeQuizSessionLessonId)
-  const messages = selectedChatLesson ? chatHistoryByLesson[selectedChatLesson.id] || [] : []
-  const videoMessages = activeVideoLesson ? chatHistoryByLesson[activeVideoLesson.id] || [buildLessonSupportMessage(activeVideoLesson)] : []
+  const selectedChatSessions = selectedChatLesson ? chatSessionsByLesson[selectedChatLesson.id] || [] : []
+  const selectedChatSessionId = selectedChatLesson ? activeChatSessionIdByLesson[selectedChatLesson.id] || selectedChatSessions[0]?.id || '' : ''
+  const selectedChatSession = selectedChatSessions.find((session) => session.id === selectedChatSessionId) || selectedChatSessions[0] || null
+  const messages = selectedChatSession?.messages || []
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
+  const canPassActiveQuiz = Boolean(activeQuizResult && activeQuizResult.scorePercent > 70)
   const savedTopicOptions = chatTopics
     .filter((topic) => {
       const query = profile.topic.trim()
@@ -207,10 +270,12 @@ export default function Home() {
       const restoredSchedulePlans = restoredPlan ? upsertSavedPlan(restoredSavedPlans, restoredPlan) : restoredSavedPlans
       const restoredRawChatTopics = Array.isArray(parsed.chatTopics) ? parsed.chatTopics : restoredPlan ? [buildChatTopic(restoredPlan)] : []
       const restoredChatData = pruneChatDataForPlans(restoredSchedulePlans, restoredRawChatTopics, parsed.chatHistoryByLesson || {})
+      const restoredChatSessions = normalizeChatSessionsByLesson(restoredChatData.history, parsed.chatSessionsByLesson || {})
       setProfile(blankProfile)
       setPlan(restoredPlan)
       setSavedPlans(restoredSavedPlans)
       setSelectedLessonId(parsed.selectedLessonId || restoredPlan?.lessons[0]?.id || null)
+      setActiveVideoPlanId(parsed.activeVideoPlanId || (restoredPlan ? planStorageId(restoredPlan) : restoredSavedPlans[0] ? planStorageId(restoredSavedPlans[0]) : null))
       setActiveVideoLessonId(parsed.activeVideoLessonId || restoredPlan?.lessons[0]?.id || null)
       setYoutubeUrlByLesson(parsed.youtubeUrlByLesson || legacyLessonMap(restoredPlan, parsed.youtubeUrl || ''))
       setVideoAnalysisByLesson(parsed.videoAnalysisByLesson || legacyLessonMap(restoredPlan, parsed.videoAnalysis || null))
@@ -220,8 +285,11 @@ export default function Home() {
       setQuizSubmittedByLesson(parsed.quizStorageVersion === quizStorageVersion ? parsed.quizSubmittedByLesson || {} : {})
       setScheduleEvents(buildParallelSchedule(restoredSchedulePlans))
       setActiveScheduleWeek(parsed.activeScheduleWeek || restoredPlan?.lessons[0]?.week || 1)
+      setActiveSchedulePlanId(parsed.activeSchedulePlanId || (restoredPlan ? planStorageId(restoredPlan) : restoredSavedPlans[0] ? planStorageId(restoredSavedPlans[0]) : null))
       setChatTopics(restoredChatData.topics)
       setChatHistoryByLesson(restoredChatData.history)
+      setChatSessionsByLesson(restoredChatSessions)
+      setActiveChatSessionIdByLesson(pruneActiveChatSessionIds(parsed.activeChatSessionIdByLesson || {}, restoredChatSessions))
     } catch {
       // Ignore corrupted localStorage and start with a clean session.
     } finally {
@@ -257,6 +325,7 @@ export default function Home() {
       plan,
       savedPlans,
       selectedLessonId,
+      activeVideoPlanId,
       activeVideoLessonId,
       youtubeUrlByLesson,
       videoAnalysisByLesson,
@@ -267,8 +336,11 @@ export default function Home() {
       quizStorageVersion,
       scheduleEvents,
       activeScheduleWeek,
+      activeSchedulePlanId,
       chatTopics,
-      chatHistoryByLesson
+      chatHistoryByLesson,
+      chatSessionsByLesson,
+      activeChatSessionIdByLesson
     }
 
     localStorage.setItem(storageKey, JSON.stringify(payload))
@@ -277,6 +349,7 @@ export default function Home() {
     plan,
     savedPlans,
     selectedLessonId,
+    activeVideoPlanId,
     activeVideoLessonId,
     youtubeUrlByLesson,
     videoAnalysisByLesson,
@@ -286,8 +359,11 @@ export default function Home() {
     quizSubmittedByLesson,
     scheduleEvents,
     activeScheduleWeek,
+    activeSchedulePlanId,
     chatTopics,
     chatHistoryByLesson,
+    chatSessionsByLesson,
+    activeChatSessionIdByLesson,
     hasLoadedStorage
   ])
 
@@ -295,47 +371,157 @@ export default function Home() {
     if (!hasLoadedStorage || !plan || isProcessingVideoBatch) return
     const planKey = planStorageId(plan)
     const alreadyStarted = plan.lessons.every((lesson) => autoSuggestedVideoKeysRef.current.has(videoJobKey(plan, lesson)))
-    const hasMissingVideo = plan.lessons.some((lesson) => !videoAnalysisByLesson[lesson.id])
+    const hasMissingVideo = plan.lessons.some((lesson) => !getLessonScopedValue<VideoAnalysis | null>(videoAnalysisByLesson, plan, lesson, null))
     if (!hasMissingVideo || alreadyStarted) return
     autoSuggestedVideoKeysRef.current.add(`batch:${planKey}`)
     void suggestAndAnalyzeAllVideos(plan)
   }, [hasLoadedStorage, plan])
 
+  useEffect(() => {
+    if (!hasLoadedStorage || !plan) return
+    const planId = planStorageId(plan)
+    const hasSuggestedResources = plan.lessons.some((lesson) => (lesson.recommendedResources || []).length > 0)
+    if (!hasSuggestedResources || enrichedResourcePlanIdsRef.current.has(planId)) return
+    enrichedResourcePlanIdsRef.current.add(planId)
+    void enrichPlanResourceLinks(plan)
+  }, [hasLoadedStorage, plan])
+
   async function generatePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const cleanTopic = profile.topic.trim()
+    const cleanGoal = profile.goal.trim()
+    const durationWeeks = Math.max(1, Math.min(12, Number(profile.durationWeeks) || 1))
+    const hoursPerWeek = Number(profile.hoursPerWeek)
+
+    if (!cleanTopic) {
+      setProfileError('Chủ đề không được để trống.')
+      return
+    }
+
+    if (!Number.isFinite(hoursPerWeek) || hoursPerWeek < 1 || hoursPerWeek > 168) {
+      setProfileError('Giờ/tuần phải nằm trong khoảng 1 đến 168 giờ.')
+      return
+    }
+
+    const nextProfile: LearnerProfile = {
+      ...profile,
+      topic: cleanTopic,
+      goal: cleanGoal,
+      durationWeeks,
+      hoursPerWeek
+    }
+
+    setProfileError('')
     setIsGenerating(true)
 
-    const response = await fetch('/api/plan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(profile)
-    })
-    const payload = await response.json()
-    const nextPlan = normalizeLoadedPlan(payload.plan as LearningPlan)
-    const firstLesson = nextPlan.lessons[0] || null
-    const nextTopic = buildChatTopic(nextPlan)
-    const nextSavedPlans = upsertSavedPlan(savedPlans, nextPlan)
-    const nextPlanId = planStorageId(nextPlan)
+    try {
+      const response = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nextProfile)
+      })
+      const payload = (await response.json().catch(() => null)) as { error?: string; plan?: LearningPlan } | null
 
-    setPlan(nextPlan)
-    setSavedPlans(nextSavedPlans)
-    setSelectedLessonId(firstLesson?.id || null)
-    setActiveVideoLessonId(firstLesson?.id || null)
-    clearVideoStateForPlan(nextPlan)
-    setVideoError('')
-    setActiveScheduleWeek(firstLesson?.week || 1)
-    setScheduleEvents(buildParallelSchedule(nextSavedPlans))
-    setActiveChatTopicId(nextTopic.id)
-    setActiveChatLessonId(firstLesson?.id || null)
-    setChatTopics((current) => upsertChatTopic(current, nextTopic))
-    setExpandedScheduleTopicIds((current) => ({ ...current, [nextPlanId]: true }))
-    setExpandedChatTopicIds((current) => ({ ...current, [nextTopic.id]: true }))
-    setProfile(blankProfile)
+      if (!response.ok || !payload?.plan) {
+        setProfileError(payload?.error || 'Không tạo được lộ trình. Hãy thử lại.')
+        return
+      }
+
+      const nextPlan = normalizeLoadedPlan(payload.plan)
+      const firstLesson = nextPlan.lessons[0] || null
+      const nextTopic = buildChatTopic(nextPlan)
+      const previousPlan = editingPlanId ? savedPlans.find((item) => planStorageId(item) === editingPlanId) || (plan && planStorageId(plan) === editingPlanId ? plan : null) : null
+      const nextSavedPlans = upsertSavedPlan(previousPlan ? savedPlans.filter((item) => planStorageId(item) !== editingPlanId) : savedPlans, nextPlan)
+      const nextPlanId = planStorageId(nextPlan)
+
+      if (previousPlan) {
+        const deletedLessonIds = new Set(previousPlan.lessons.map((lesson) => lesson.id))
+        const deletedTopicId = buildChatTopic(previousPlan).id
+        clearVideoStateForPlan(previousPlan)
+        setChatTopics((current) => current.filter((topic) => topic.id !== deletedTopicId))
+        setChatHistoryByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
+        setChatSessionsByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
+        setActiveChatSessionIdByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
+        setExpandedScheduleTopicIds((current) => omitRecordKey(current, editingPlanId || ''))
+        setExpandedVideoTopicIds((current) => omitRecordKey(current, editingPlanId || ''))
+        setExpandedChatTopicIds((current) => omitRecordKey(current, deletedTopicId))
+      }
+
+      setPlan(nextPlan)
+      setSavedPlans(nextSavedPlans)
+      setSelectedLessonId(firstLesson?.id || null)
+      setActiveSchedulePlanId(nextPlanId)
+      setActiveVideoPlanId(nextPlanId)
+      setActiveVideoLessonId(firstLesson?.id || null)
+      setVideoError('')
+      setActiveScheduleWeek(firstLesson?.week || 1)
+      setScheduleEvents(buildParallelSchedule(nextSavedPlans))
+      setActiveChatTopicId(nextTopic.id)
+      setActiveChatLessonId(firstLesson?.id || null)
+      setChatTopics((current) => upsertChatTopic(current, nextTopic))
+      setExpandedScheduleTopicIds((current) => ({ ...current, [nextPlanId]: true }))
+      setExpandedVideoTopicIds((current) => ({ ...current, [nextPlanId]: true }))
+      setExpandedChatTopicIds((current) => ({ ...current, [nextTopic.id]: true }))
+      setEditingPlanId(null)
+      setIsProfileEditorOpen(false)
+      setProfile(blankProfile)
+      setIsTopicInputFocused(false)
+      if (firstLesson) ensureLessonChat(firstLesson)
+      setView('plan')
+      void suggestAndAnalyzeAllVideos(nextPlan)
+    } catch {
+      setProfileError('Không tạo được lộ trình. Hãy kiểm tra kết nối hoặc thử lại.')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  async function enrichPlanResourceLinks(sourcePlan: LearningPlan) {
+    try {
+      const response = await fetch('/api/resources/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: sourcePlan })
+      })
+      const payload = (await response.json().catch(() => null)) as { lessons?: Lesson[] } | null
+      if (!response.ok || !payload?.lessons?.length) return
+
+      const nextPlan = normalizeLoadedPlan({ ...sourcePlan, lessons: payload.lessons })
+      const nextPlanId = planStorageId(nextPlan)
+      const nextTopic = buildChatTopic(nextPlan)
+
+      setPlan((current) => (current && planStorageId(current) === nextPlanId ? nextPlan : current))
+      setSavedPlans((current) => current.map((item) => (planStorageId(item) === nextPlanId ? nextPlan : item)))
+      setChatTopics((current) => current.map((topic) => (topic.id === nextTopic.id ? nextTopic : topic)))
+    } catch {
+      // Keep the current plan if enrichment fails.
+    }
+  }
+
+  function openProfileEditor() {
+    if (plan) {
+      setProfile({ ...plan.profile })
+      setEditingPlanId(planStorageId(plan))
+    }
+    setProfileError('')
     setIsTopicInputFocused(false)
-    if (firstLesson) ensureLessonChat(firstLesson)
-    setView('plan')
-    setIsGenerating(false)
-    void suggestAndAnalyzeAllVideos(nextPlan)
+    setIsProfileEditorOpen(true)
+  }
+
+  function closeProfileEditor() {
+    setIsProfileEditorOpen(false)
+    setEditingPlanId(null)
+    setProfile(blankProfile)
+    setProfileError('')
+    setIsTopicInputFocused(false)
+  }
+
+  function startNewPlanDraft() {
+    setEditingPlanId(null)
+    setProfile(blankProfile)
+    setProfileError('')
+    setIsTopicInputFocused(false)
+    setIsProfileEditorOpen(true)
   }
 
   function selectLesson(lessonId: string) {
@@ -361,30 +547,40 @@ export default function Home() {
     )
   }
 
-  function ensureLessonChat(lesson: Lesson) {
-    setChatHistoryByLesson((current) => {
-      if (current[lesson.id]) return current
-      return { ...current, [lesson.id]: [buildLessonSupportMessage(lesson)] }
-    })
+  async function requestLessonCompletion(lesson: Lesson) {
+    if (!plan || isQuizInProgress) return
+    setSelectedLessonId(lesson.id)
+    setActiveVideoPlanId(planStorageId(plan))
+    setActiveVideoLessonId(lesson.id)
+    setView('quiz')
+
+    if (!quizByLesson[lesson.id]) {
+      const didCreateQuiz = await generateLessonQuiz(lesson)
+      if (!didCreateQuiz) return
+    }
+
+    setQuizAnswersByLesson((current) => ({ ...current, [lesson.id]: {} }))
+    setQuizSubmittedByLesson((current) => ({ ...current, [lesson.id]: false }))
+    setActiveQuizSessionLessonId(lesson.id)
   }
 
-  function openChatForLesson(lesson: Lesson) {
-    if (isQuizInProgress) return
-    if (plan) {
-      const topic = buildChatTopic(plan)
-      setChatTopics((current) => upsertChatTopic(current, topic))
-      setActiveChatTopicId(topic.id)
-    }
-    setActiveChatLessonId(lesson.id)
-    ensureLessonChat(lesson)
-    setQuestion('')
-    setView('chat')
+  function ensureLessonChat(lesson: Lesson) {
+    setChatSessionsByLesson((current) => {
+      if (current[lesson.id]?.length) return current
+      const session = createChatSession(lesson, 1)
+      setActiveChatSessionIdByLesson((active) => ({ ...active, [lesson.id]: session.id }))
+      return { ...current, [lesson.id]: [session] }
+    })
   }
 
   function selectChatLesson(topic: ChatTopic, lesson: Lesson) {
     setActiveChatTopicId(topic.id)
     setActiveChatLessonId(lesson.id)
     ensureLessonChat(lesson)
+    const firstSession = chatSessionsByLesson[lesson.id]?.[0]
+    if (firstSession) {
+      setActiveChatSessionIdByLesson((current) => ({ ...current, [lesson.id]: current[lesson.id] || firstSession.id }))
+    }
     setQuestion('')
   }
 
@@ -393,36 +589,65 @@ export default function Home() {
     if (!trimmed || !selectedChatTopic || !selectedChatLesson || isQuizInProgress) return
 
     const lessonId = selectedChatLesson.id
-    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(selectedChatLesson)]
+    const currentSession = selectedChatSession || createChatSession(selectedChatLesson, selectedChatSessions.length + 1)
+    const currentMessages = currentSession.messages
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
     const nextMessages = [...currentMessages, userMessage]
-    setChatHistoryByLesson((current) => ({ ...current, [lessonId]: nextMessages }))
+    upsertChatSessionMessages(lessonId, currentSession, nextMessages)
     setQuestion('')
     setIsAsking(true)
 
     try {
       const videoReferences = buildTutorVideoReferences(trimmed, selectedChatLesson, selectedChatTopic, videoAnalysisByLesson)
+      const contextMessages = currentMessages.filter((message) => !isLessonSupportMessage(message)).slice(-8)
       const response = await fetch('/api/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed, plan: plan || topicToPlan(selectedChatTopic), lesson: selectedChatLesson, history: currentMessages.slice(-6), videoReferences })
+        body: JSON.stringify({ question: trimmed, plan: plan || topicToPlan(selectedChatTopic), lesson: selectedChatLesson, history: contextMessages, videoReferences })
       })
       const payload = await response.json()
-      setChatHistoryByLesson((current) => ({
-        ...current,
-        [lessonId]: [...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }]
-      }))
+      upsertChatSessionMessages(lessonId, currentSession, [...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }])
     } finally {
       setIsAsking(false)
     }
   }
 
   function clearCurrentChat() {
-    if (!selectedChatLesson) return
-    setChatHistoryByLesson((current) => ({
-      ...current,
-      [selectedChatLesson.id]: [buildLessonSupportMessage(selectedChatLesson)]
-    }))
+    if (!selectedChatLesson || !selectedChatSession) return
+    upsertChatSessionMessages(selectedChatLesson.id, selectedChatSession, [buildLessonSupportMessage(selectedChatLesson)])
+  }
+
+  function upsertChatSessionMessages(lessonId: string, session: ChatSession, messages: ChatMessage[]) {
+    const updatedSession = {
+      ...session,
+      title: buildChatSessionTitle(session, messages),
+      updatedAt: new Date().toISOString(),
+      messages
+    }
+    setChatSessionsByLesson((current) => {
+      const sessions = current[lessonId] || []
+      const exists = sessions.some((item) => item.id === session.id)
+      return {
+        ...current,
+        [lessonId]: exists ? sessions.map((item) => (item.id === session.id ? updatedSession : item)) : [updatedSession, ...sessions]
+      }
+    })
+    setActiveChatSessionIdByLesson((current) => ({ ...current, [lessonId]: session.id }))
+  }
+
+  function startNewChatSession(lesson: Lesson) {
+    const nextIndex = (chatSessionsByLesson[lesson.id] || []).length + 1
+    const session = createChatSession(lesson, nextIndex)
+    setChatSessionsByLesson((current) => ({ ...current, [lesson.id]: [session, ...(current[lesson.id] || [])] }))
+    setActiveChatSessionIdByLesson((current) => ({ ...current, [lesson.id]: session.id }))
+    setActiveChatLessonId(lesson.id)
+    setQuestion('')
+  }
+
+  function selectChatSession(lesson: Lesson, sessionId: string) {
+    setActiveChatLessonId(lesson.id)
+    setActiveChatSessionIdByLesson((current) => ({ ...current, [lesson.id]: sessionId }))
+    setQuestion('')
   }
 
   async function askTutor(event: FormEvent<HTMLFormElement>) {
@@ -430,49 +655,15 @@ export default function Home() {
     await sendTutorQuestion(question)
   }
 
-  async function askVideoTutor(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    const trimmed = videoQuestion.trim()
-    if (!trimmed || !plan || !activeVideoLesson || isQuizInProgress) return
-
-    const topic = buildChatTopic(plan)
-    setChatTopics((current) => upsertChatTopic(current, topic))
-    setActiveChatTopicId(topic.id)
-    setActiveChatLessonId(activeVideoLesson.id)
-
-    const lessonId = activeVideoLesson.id
-    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(activeVideoLesson)]
-    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
-    const nextMessages = [...currentMessages, userMessage]
-    setChatHistoryByLesson((current) => ({ ...current, [lessonId]: nextMessages }))
-    setVideoQuestion('')
-    setIsAsking(true)
-
-    try {
-      const videoReferences = buildTutorVideoReferences(trimmed, activeVideoLesson, topic, videoAnalysisByLesson)
-      const response = await fetch('/api/tutor', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed, plan, lesson: activeVideoLesson, history: currentMessages.slice(-6), videoReferences })
-      })
-      const payload = await response.json()
-      setChatHistoryByLesson((current) => ({
-        ...current,
-        [lessonId]: [...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }]
-      }))
-    } finally {
-      setIsAsking(false)
-    }
-  }
-
   async function analyzeVideo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     await analyzeVideoUrl(youtubeUrl)
   }
 
-  async function analyzeVideoUrl(url: string, sourcePlan = plan, sourceLesson = activeVideoLesson) {
+  async function analyzeVideoUrl(url: string, sourcePlan = activeVideoPlan, sourceLesson = activeVideoLesson) {
     const lesson = sourceLesson || sourcePlan?.lessons.find((item) => item.id === activeVideoLessonId) || sourcePlan?.lessons[0] || null
     if (!url.trim() || !sourcePlan || !lesson) return
+    const stateKey = videoStateKey(sourcePlan, lesson)
 
     setIsAnalyzingVideo(true)
     setVideoError('')
@@ -485,22 +676,23 @@ export default function Home() {
     const payload = await response.json()
 
     if (!response.ok) {
-      setVideoAnalysisByLesson((current) => omitRecordKey(current, lesson.id))
+      setVideoAnalysisByLesson((current) => omitRecordKey(current, stateKey))
       setVideoError(formatVideoUiError(payload.error || 'Không phân tích được video.'))
     } else {
-      setVideoAnalysisByLesson((current) => ({ ...current, [lesson.id]: payload.analysis as VideoAnalysis }))
+      setVideoAnalysisByLesson((current) => ({ ...current, [stateKey]: payload.analysis as VideoAnalysis }))
       setVideoError('')
     }
 
     setIsAnalyzingVideo(false)
   }
 
-  async function suggestAndAnalyzeVideo(sourcePlan = plan, sourceLesson = activeVideoLesson, force = false) {
+  async function suggestAndAnalyzeVideo(sourcePlan = activeVideoPlan, sourceLesson = activeVideoLesson, force = false) {
     if (!sourcePlan) return
     if (!sourceLesson) return
 
     const autoSuggestKey = videoJobKey(sourcePlan, sourceLesson)
-    if (!force && (videoAnalysisByLesson[sourceLesson.id] || autoSuggestedVideoKeysRef.current.has(autoSuggestKey))) return
+    const stateKey = videoStateKey(sourcePlan, sourceLesson)
+    if (!force && (getLessonScopedValue<VideoAnalysis | null>(videoAnalysisByLesson, sourcePlan, sourceLesson, null) || autoSuggestedVideoKeysRef.current.has(autoSuggestKey))) return
     autoSuggestedVideoKeysRef.current.add(autoSuggestKey)
 
     setIsSuggestingVideo(true)
@@ -520,24 +712,25 @@ export default function Home() {
     const payload = await response.json()
 
     if (!response.ok) {
-      setVideoRecommendationByLesson((current) => omitRecordKey(current, sourceLesson.id))
+      setVideoRecommendationByLesson((current) => omitRecordKey(current, stateKey))
       setVideoError(formatVideoUiError(payload.error || 'Không gợi ý được video.'))
       setIsSuggestingVideo(false)
       return
     }
 
     const recommendation = payload.recommendation as VideoRecommendation
-    setVideoRecommendationByLesson((current) => ({ ...current, [sourceLesson.id]: recommendation }))
-    setYoutubeUrlByLesson((current) => ({ ...current, [sourceLesson.id]: recommendation.url }))
+    setVideoRecommendationByLesson((current) => ({ ...current, [stateKey]: recommendation }))
+    setYoutubeUrlByLesson((current) => ({ ...current, [stateKey]: recommendation.url }))
     setIsSuggestingVideo(false)
     await analyzeVideoUrl(recommendation.url, sourcePlan, sourceLesson)
   }
 
   function playVideoAt(lessonId: string, startSeconds: number) {
-    setVideoPlayerStartByLesson((current) => ({ ...current, [lessonId]: Math.max(0, Math.floor(startSeconds)) }))
+    const stateKey = activeVideoPlan && activeVideoLesson && activeVideoLesson.id === lessonId ? videoStateKey(activeVideoPlan, activeVideoLesson) : lessonId
+    setVideoPlayerStartByLesson((current) => ({ ...current, [stateKey]: Math.max(0, Math.floor(startSeconds)) }))
   }
 
-  async function suggestAndAnalyzeAllVideos(sourcePlan = plan) {
+  async function suggestAndAnalyzeAllVideos(sourcePlan = activeVideoPlan) {
     if (!sourcePlan || isProcessingVideoBatch) return
 
     setIsProcessingVideoBatch(true)
@@ -552,7 +745,7 @@ export default function Home() {
 
     for (const lesson of sourcePlan.lessons) {
       const key = videoJobKey(sourcePlan, lesson)
-      if (videoAnalysisByLesson[lesson.id] || autoSuggestedVideoKeysRef.current.has(key)) continue
+      if (getLessonScopedValue<VideoAnalysis | null>(videoAnalysisByLesson, sourcePlan, lesson, null) || autoSuggestedVideoKeysRef.current.has(key)) continue
       setVideoBatchStatus(`Đang gợi ý video tuần ${lesson.week}/${sourcePlan.lessons.length}`)
       await suggestAndAnalyzeVideo(sourcePlan, lesson)
     }
@@ -563,7 +756,7 @@ export default function Home() {
 
   async function suggestAndAnalyzeSharedVideo(sourcePlan: LearningPlan) {
     const sharedKey = `shared:${planStorageId(sourcePlan)}:${sourcePlan.profile.videoLanguage}`
-    const allLessonsAlreadyHaveVideo = sourcePlan.lessons.every((lesson) => videoAnalysisByLesson[lesson.id])
+    const allLessonsAlreadyHaveVideo = sourcePlan.lessons.every((lesson) => getLessonScopedValue<VideoAnalysis | null>(videoAnalysisByLesson, sourcePlan, lesson, null))
     if (allLessonsAlreadyHaveVideo || autoSuggestedVideoKeysRef.current.has(sharedKey)) return false
 
     autoSuggestedVideoKeysRef.current.add(sharedKey)
@@ -597,9 +790,10 @@ export default function Home() {
     const nextUrls: Record<string, string> = {}
 
     for (const lesson of sourcePlan.lessons) {
-      nextAnalysis[lesson.id] = analysis
-      nextRecommendation[lesson.id] = recommendation
-      nextUrls[lesson.id] = recommendation.url
+      const stateKey = videoStateKey(sourcePlan, lesson)
+      nextAnalysis[stateKey] = analysis
+      nextRecommendation[stateKey] = recommendation
+      nextUrls[stateKey] = recommendation.url
       autoSuggestedVideoKeysRef.current.add(videoJobKey(sourcePlan, lesson))
     }
 
@@ -610,8 +804,9 @@ export default function Home() {
     return true
   }
 
-  async function generateLessonQuiz() {
-    if (!plan || !activeVideoLesson) return
+  async function generateLessonQuiz(sourceLesson = activeVideoLesson) {
+    const sourcePlan = activeVideoPlan || plan
+    if (!sourcePlan || !sourceLesson) return false
 
     setIsGeneratingQuiz(true)
     setVideoError('')
@@ -619,22 +814,29 @@ export default function Home() {
     const response = await fetch('/api/quiz', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan, lesson: activeVideoLesson, matches: activeQuizVideoMatches })
+      body: JSON.stringify({
+        plan: sourcePlan,
+        lesson: sourceLesson,
+        matches: sourceLesson.id === activeVideoLesson?.id ? activeQuizVideoMatches : []
+      })
     })
     const payload = await response.json()
 
     if (!response.ok) {
       setVideoError(payload.error || 'Không tạo được quiz.')
+      setIsGeneratingQuiz(false)
+      return false
     } else {
       const quiz = payload.quiz as LessonQuiz
-      setQuizByLesson((current) => ({ ...current, [activeVideoLesson.id]: quiz }))
-      setQuizAnswersByLesson((current) => ({ ...current, [activeVideoLesson.id]: {} }))
-      setQuizSubmittedByLesson((current) => ({ ...current, [activeVideoLesson.id]: false }))
+      setQuizByLesson((current) => ({ ...current, [sourceLesson.id]: quiz }))
+      setQuizAnswersByLesson((current) => ({ ...current, [sourceLesson.id]: {} }))
+      setQuizSubmittedByLesson((current) => ({ ...current, [sourceLesson.id]: false }))
       setActiveQuizSessionLessonId(null)
       setVideoError('')
     }
 
     setIsGeneratingQuiz(false)
+    return true
   }
 
   function startActiveQuiz() {
@@ -648,7 +850,9 @@ export default function Home() {
     if (!activeVideoLesson || !activeQuiz || !canCompleteActiveQuiz) return
     setQuizSubmittedByLesson((current) => ({ ...current, [activeVideoLesson.id]: true }))
     setActiveQuizSessionLessonId(null)
-    updateLessonStatus(activeVideoLesson.id, 'done')
+    if (canPassActiveQuiz) {
+      updateLessonStatus(activeVideoLesson.id, 'done')
+    }
   }
 
   function chooseQuizAnswer(questionId: string, optionIndex: number) {
@@ -668,6 +872,9 @@ export default function Home() {
   function addLessonToSchedule(lesson: Lesson, sourcePlan?: LearningPlan) {
     const ownerPlan = sourcePlan || plan || schedulePlans[0]
     const start = preferredScheduleStart[ownerPlan?.profile.learningTimePreference || profile.learningTimePreference]
+    if (ownerPlan) setActiveSchedulePlanId(planStorageId(ownerPlan))
+    const targetWeek = Math.max(1, lesson.week)
+    const targetDate = addDays(scheduleBaseMonday, (targetWeek - 1) * 7)
     setScheduleEvents((current) => [
       ...current,
       {
@@ -680,14 +887,90 @@ export default function Home() {
         day: 'Thứ 2',
         start,
         end: addMinutesToTime(start, Math.min(120, lesson.durationMinutes)),
-        kind: 'study'
+        kind: 'study',
+        status: 'planned'
       }
     ])
-    setActiveScheduleWeek(lesson.week)
+    setActiveScheduleWeek(targetWeek)
+    setSelectedScheduleDate(targetDate)
+    setCalendarMonthDate(startOfMonth(targetDate))
   }
 
   function toggleScheduleTopic(topicId: string) {
     setExpandedScheduleTopicIds((current) => ({ ...current, [topicId]: !current[topicId] }))
+    setActiveSchedulePlanId(topicId)
+    const sourcePlan = schedulePlans.find((item) => planStorageId(item) === topicId)
+    setActiveScheduleWeek(sourcePlan?.lessons[0]?.week || 1)
+  }
+
+  function selectScheduleWeek(sourcePlan: LearningPlan, week: number) {
+    setActiveSchedulePlanId(planStorageId(sourcePlan))
+    setActiveScheduleWeek(week)
+    const date = addDays(scheduleBaseMonday, (Math.max(1, week) - 1) * 7)
+    setSelectedScheduleDate(date)
+    setCalendarMonthDate(startOfMonth(date))
+  }
+
+  function clearScheduleFocus() {
+    setActiveSchedulePlanId(null)
+  }
+
+  function toggleScheduleCourseFilter(planId: string) {
+    setScheduleCourseFilters((current) => ({ ...current, [planId]: current[planId] === false }))
+  }
+
+  function toggleScheduleKindFilter(kind: ScheduleEvent['kind']) {
+    setScheduleKindFilters((current) => ({ ...current, [kind]: current[kind] === false }))
+  }
+
+  function addBlankScheduleEvent(date = selectedScheduleDate) {
+    const sourcePlan = activeSchedulePlan || schedulePlans.find((item) => scheduleCourseFilters[planStorageId(item)] !== false) || schedulePlans[0]
+    const start = preferredScheduleStart[sourcePlan?.profile.learningTimePreference || profile.learningTimePreference]
+    const week = scheduleWeekFromDate(date)
+    const day = scheduleDays[(date.getDay() + 6) % 7]
+    const nextEvent: ScheduleEvent = {
+      id: crypto.randomUUID(),
+      planId: sourcePlan ? planStorageId(sourcePlan) : undefined,
+      planTitle: sourcePlan?.profile.topic,
+      lessonId: 'custom',
+      week,
+      title: 'Buổi học mới',
+      day,
+      start,
+      end: addMinutesToTime(start, 60),
+      kind: 'study',
+      status: 'planned'
+    }
+    setScheduleEvents((current) => [...current, nextEvent])
+    setSelectedScheduleDate(date)
+    setActiveScheduleWeek(week)
+    setCalendarMonthDate(startOfMonth(date))
+    setEditingScheduleEvent(nextEvent)
+  }
+
+  function toggleVideoTopic(sourcePlan: LearningPlan) {
+    const sourcePlanId = planStorageId(sourcePlan)
+    setActiveVideoPlanId(sourcePlanId)
+    setActiveVideoLessonId((current) => sourcePlan.lessons.some((lesson) => lesson.id === current) ? current : sourcePlan.lessons[0]?.id || null)
+    setExpandedVideoTopicIds((current) => ({ ...current, [sourcePlanId]: !current[sourcePlanId] }))
+  }
+
+  function selectVideoLesson(sourcePlan: LearningPlan, lesson: Lesson) {
+    setActiveVideoPlanId(planStorageId(sourcePlan))
+    setActiveVideoLessonId(lesson.id)
+  }
+
+  function toggleQuizTopic(sourcePlan: LearningPlan) {
+    const sourcePlanId = planStorageId(sourcePlan)
+    setActiveVideoPlanId(sourcePlanId)
+    setActiveVideoLessonId((current) => sourcePlan.lessons.some((lesson) => lesson.id === current) ? current : sourcePlan.lessons[0]?.id || null)
+    setExpandedQuizTopicIds((current) => ({ ...current, [sourcePlanId]: !current[sourcePlanId] }))
+  }
+
+  function selectQuizLesson(sourcePlan: LearningPlan, lesson: Lesson) {
+    setActiveVideoPlanId(planStorageId(sourcePlan))
+    setActiveVideoLessonId(lesson.id)
+    setExpandedQuizTopicIds((current) => ({ ...current, [planStorageId(sourcePlan)]: true }))
   }
 
   function toggleChatTopic(topic: ChatTopic) {
@@ -710,6 +993,180 @@ export default function Home() {
 
   function removeScheduleEvent(eventId: string) {
     setScheduleEvents((current) => current.filter((event) => event.id !== eventId))
+    if (editingScheduleEvent?.id === eventId) setEditingScheduleEvent(null)
+  }
+
+  function selectScheduleDate(date: Date) {
+    setSelectedScheduleDate(date)
+    setActiveScheduleWeek(scheduleWeekFromDate(date))
+    setCalendarMonthDate(startOfMonth(date))
+  }
+
+  function shiftScheduleRange(offset: number) {
+    if (calendarViewMode === 'month') {
+      setCalendarMonthDate((current) => addMonths(current, offset))
+      return
+    }
+
+    const nextDate = addDays(selectedScheduleDate, offset * (calendarViewMode === 'week' ? 7 : 1))
+    setSelectedScheduleDate(nextDate)
+    setActiveScheduleWeek(scheduleWeekFromDate(nextDate))
+    setCalendarMonthDate(startOfMonth(nextDate))
+  }
+
+  function jumpToToday() {
+    const today = new Date()
+    setCalendarMonthDate(startOfMonth(today))
+    setSelectedScheduleDate(today)
+    setActiveScheduleWeek(scheduleWeekFromDate(today))
+  }
+
+  function updateScheduleEventDateTime(eventId: string, date: Date, start: string, end?: string) {
+    const week = scheduleWeekFromDate(date)
+    const day = scheduleDays[(date.getDay() + 6) % 7]
+    setScheduleEvents((current) =>
+      current.map((event) => {
+        if (event.id !== eventId) return event
+        const duration = timeToMinutes(event.end) - timeToMinutes(event.start)
+        const nextEnd = end || addMinutesToTime(start, Math.max(30, duration))
+        return { ...event, week, day, start, end: nextEnd }
+      })
+    )
+    setActiveScheduleWeek(week)
+    setSelectedScheduleDate(date)
+  }
+
+  function resizeScheduleEvent(eventId: string, edge: 'start' | 'end', value: string) {
+    setScheduleEvents((current) =>
+      current.map((event) => {
+        if (event.id !== eventId) return event
+        if (edge === 'start') {
+          return timeToMinutes(value) < timeToMinutes(event.end) ? { ...event, start: value } : event
+        }
+        return timeToMinutes(value) > timeToMinutes(event.start) ? { ...event, end: value } : event
+      })
+    )
+  }
+
+  function handleScheduleDragOver(event: DragEvent<HTMLElement>) {
+    event.preventDefault()
+    const edgeSize = 80
+    if (monthDragSwitchRef.current) return
+    if (event.clientX > window.innerWidth - edgeSize) {
+      monthDragSwitchRef.current = setTimeout(() => {
+        shiftScheduleRange(1)
+        monthDragSwitchRef.current = null
+      }, 550)
+    } else if (event.clientX < edgeSize) {
+      monthDragSwitchRef.current = setTimeout(() => {
+        shiftScheduleRange(-1)
+        monthDragSwitchRef.current = null
+      }, 550)
+    }
+  }
+
+  function clearScheduleDragSwitch() {
+    if (!monthDragSwitchRef.current) return
+    clearTimeout(monthDragSwitchRef.current)
+    monthDragSwitchRef.current = null
+  }
+
+  function startScheduleEventDrag(event: DragEvent<HTMLElement>, scheduleEvent: ScheduleEvent) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('schedule-event-id', scheduleEvent.id)
+    setScheduleDragPreview(event, `${scheduleEvent.start} ${shortScheduleTitle(scheduleEvent.title)}`)
+  }
+
+  function handleMonthDayDrop(event: DragEvent<HTMLElement>, date: Date) {
+    event.preventDefault()
+    clearScheduleDragSwitch()
+    const eventId = event.dataTransfer.getData('schedule-event-id')
+    const lessonId = event.dataTransfer.getData('lesson-id')
+    const planId = event.dataTransfer.getData('plan-id')
+    if (eventId) {
+      const target = scheduleEvents.find((item) => item.id === eventId)
+      if (target) updateScheduleEventDateTime(eventId, date, target.start, target.end)
+      return
+    }
+    createScheduleEventFromLesson(lessonId, planId, date)
+  }
+
+  function handleTimelineDrop(event: DragEvent<HTMLDivElement>, date: Date, start: string) {
+    event.preventDefault()
+    clearScheduleDragSwitch()
+    const resizeEdge = event.dataTransfer.getData('resize-edge') as 'start' | 'end' | ''
+    const eventId = event.dataTransfer.getData('schedule-event-id')
+    const lessonId = event.dataTransfer.getData('lesson-id')
+    const planId = event.dataTransfer.getData('plan-id')
+    if (eventId && resizeEdge) {
+      resizeScheduleEvent(eventId, resizeEdge, start)
+      return
+    }
+    if (eventId) {
+      updateScheduleEventDateTime(eventId, date, start)
+      return
+    }
+    createScheduleEventFromLesson(lessonId, planId, date, start)
+  }
+
+  function createScheduleEventFromLesson(lessonId: string, planId: string, date: Date, start?: string) {
+    const sourcePlan = schedulePlans.find((item) => planStorageId(item) === planId) || schedulePlans.find((item) => planStorageId(item) === activeSchedulePlanId) || plan || schedulePlans[0]
+    const lesson = sourcePlan?.lessons.find((item) => item.id === lessonId)
+    if (!lesson || !sourcePlan) return
+    const startTime = start || preferredScheduleStart[sourcePlan.profile.learningTimePreference]
+    const week = scheduleWeekFromDate(date)
+    const day = scheduleDays[(date.getDay() + 6) % 7]
+    setScheduleEvents((current) => [
+      ...current,
+      {
+        id: crypto.randomUUID(),
+        planId: planStorageId(sourcePlan),
+        planTitle: sourcePlan.profile.topic,
+        lessonId: lesson.id,
+        week,
+        title: `${sourcePlan.profile.topic}: ${lesson.title}`,
+        day,
+        start: startTime,
+        end: addMinutesToTime(startTime, Math.min(120, lesson.durationMinutes)),
+        kind: 'study',
+        status: 'planned'
+      }
+    ])
+    setActiveSchedulePlanId(planStorageId(sourcePlan))
+    setActiveScheduleWeek(week)
+    setSelectedScheduleDate(date)
+  }
+
+  function saveScheduleEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!editingScheduleEvent) return
+    const formData = new FormData(event.currentTarget)
+    const dateValue = String(formData.get('date') || '')
+    const start = String(formData.get('start') || editingScheduleEvent.start)
+    const end = String(formData.get('end') || editingScheduleEvent.end)
+    const date = dateValue ? new Date(`${dateValue}T00:00:00`) : scheduleEventDate(editingScheduleEvent)
+    const week = scheduleWeekFromDate(date)
+    const day = scheduleDays[(date.getDay() + 6) % 7]
+    setScheduleEvents((current) =>
+      current.map((item) =>
+        item.id === editingScheduleEvent.id
+          ? {
+              ...item,
+              title: String(formData.get('title') || item.title),
+              week,
+              day,
+              start,
+              end,
+              note: String(formData.get('note') || ''),
+              status: String(formData.get('status') || 'planned') as ScheduleEvent['status']
+            }
+          : item
+      )
+    )
+    setSelectedScheduleDate(date)
+    setActiveScheduleWeek(week)
+    setCalendarMonthDate(startOfMonth(date))
+    setEditingScheduleEvent(null)
   }
 
   function handleDropSchedule(event: DragEvent<HTMLDivElement>, day: string, start: string) {
@@ -745,7 +1202,9 @@ export default function Home() {
   }
 
   function applySavedTopic(topic: ChatTopic) {
+    setEditingPlanId(null)
     setProfile(topic.profile)
+    setIsProfileEditorOpen(true)
     setIsTopicInputFocused(false)
     setActiveChatTopicId(topic.id)
     setActiveChatLessonId(topic.lessons[0]?.id || null)
@@ -753,9 +1212,10 @@ export default function Home() {
 
   function clearVideoStateForPlan(nextPlan: LearningPlan) {
     const lessonIds = new Set(nextPlan.lessons.map((lesson) => lesson.id))
-    setYoutubeUrlByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setVideoAnalysisByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setVideoRecommendationByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    const prefix = `${planStorageId(nextPlan)}:`
+    setYoutubeUrlByLesson((current) => filterRecordByPrefix(current, prefix, false))
+    setVideoAnalysisByLesson((current) => filterRecordByPrefix(current, prefix, false))
+    setVideoRecommendationByLesson((current) => filterRecordByPrefix(current, prefix, false))
     setQuizByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setQuizAnswersByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setQuizSubmittedByLesson((current) => filterRecordByKeys(current, lessonIds, false))
@@ -771,18 +1231,23 @@ export default function Home() {
     setScheduleEvents(buildParallelSchedule(nextSavedPlans))
     setChatTopics((current) => current.filter((topic) => topic.id !== deletedTopicId))
     setChatHistoryByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
+    setChatSessionsByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
+    setActiveChatSessionIdByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
     setExpandedChatTopicIds((current) => omitRecordKey(current, deletedTopicId))
+    setExpandedVideoTopicIds((current) => omitRecordKey(current, savedPlanId))
+    clearVideoStateForPlan(savedPlan)
     if (activeChatTopicId === deletedTopicId) {
       setActiveChatTopicId(null)
       setActiveChatLessonId(null)
     }
 
     if (!plan || planStorageId(plan) !== savedPlanId) return
-    clearVideoStateForPlan(plan)
     setPlan(null)
     setSelectedLessonId(null)
-    setActiveVideoLessonId(null)
-    setScheduleEvents([])
+    setActiveSchedulePlanId(nextSavedPlans[0] ? planStorageId(nextSavedPlans[0]) : null)
+    setActiveVideoPlanId(nextSavedPlans[0] ? planStorageId(nextSavedPlans[0]) : null)
+    setActiveVideoLessonId(nextSavedPlans[0]?.lessons[0]?.id || null)
+    setScheduleEvents(buildParallelSchedule(nextSavedPlans))
     setActiveScheduleWeek(1)
   }
 
@@ -798,8 +1263,9 @@ export default function Home() {
     setPlan(restoredPlan)
     setSavedPlans(nextSavedPlans)
     setSelectedLessonId(firstLesson?.id || null)
+    setActiveSchedulePlanId(restoredPlanId)
+    setActiveVideoPlanId(restoredPlanId)
     setActiveVideoLessonId(firstLesson?.id || null)
-    clearVideoStateForPlan(restoredPlan)
     setVideoError('')
     setActiveScheduleWeek(firstLesson?.week || 1)
     setScheduleEvents(buildParallelSchedule(nextSavedPlans))
@@ -807,7 +1273,10 @@ export default function Home() {
     setActiveChatTopicId(topic.id)
     setActiveChatLessonId(firstLesson?.id || null)
     setExpandedScheduleTopicIds((current) => ({ ...current, [restoredPlanId]: true }))
+    setExpandedVideoTopicIds((current) => ({ ...current, [restoredPlanId]: true }))
     setExpandedChatTopicIds((current) => ({ ...current, [topic.id]: true }))
+    setEditingPlanId(null)
+    setIsProfileEditorOpen(false)
     if (firstLesson) ensureLessonChat(firstLesson)
     void suggestAndAnalyzeAllVideos(restoredPlan)
   }
@@ -815,9 +1284,10 @@ export default function Home() {
   return (
     <main className="shell">
       <section className="topbar">
-        <div>
+        <div className="topbar-copy">
           <p className="eyebrow">LearnMate Demo</p>
-          <h1>Lộ trình học cá nhân hóa và AI tutor</h1>
+          <h1>Lộ trình học cá nhân hóa</h1>
+          <p className="topbar-description">Tổ chức lộ trình theo tuần, tập trung vào bài học tiếp theo và giảm bớt thông tin không cần thiết trên cùng một màn hình.</p>
         </div>
         <div className="top-actions">
           <div className="view-switch">
@@ -848,110 +1318,161 @@ export default function Home() {
               <h2>Hồ sơ học viên</h2>
             </div>
 
-            <label>
-              Chủ đề
-              <div className="topic-combobox">
-                <input
-                  value={profile.topic}
-                  onBlur={() => setIsTopicInputFocused(false)}
-                  onChange={(event) => setProfile({ ...profile, topic: event.target.value })}
-                  onFocus={() => setIsTopicInputFocused(true)}
-                />
-                {savedTopicOptions.length > 0 && (
-                  <div className="topic-suggestions">
-                    {savedTopicOptions.map((topic) => (
-                      <button key={topic.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applySavedTopic(topic)}>
-                        <strong>{topic.topic}</strong>
-                        <span>{topic.goal}</span>
-                      </button>
-                    ))}
+            {plan && !isProfileEditorOpen ? (
+              <>
+                <div className="profile-summary-card">
+                  <div>
+                    <p className="eyebrow">Tóm tắt nhanh</p>
+                    <strong>{plan.profile.topic}</strong>
+                    <p>{plan.summary}</p>
                   </div>
-                )}
-              </div>
-            </label>
+                  <div className="profile-summary-grid">
+                    <div>
+                      <span>Trình độ</span>
+                      <strong>{learnerLevelLabel(plan.profile.level)}</strong>
+                    </div>
+                    <div>
+                      <span>Số tuần</span>
+                      <strong>{plan.profile.durationWeeks} tuần</strong>
+                    </div>
+                    <div>
+                      <span>Giờ/tuần</span>
+                      <strong>{plan.profile.hoursPerWeek} giờ</strong>
+                    </div>
+                    <div>
+                      <span>Phong cách</span>
+                      <strong>{learningStyleLabel(plan.profile.learningStyle)}</strong>
+                    </div>
+                  </div>
+                </div>
 
-            <label>
-              Mục tiêu
-              <textarea value={profile.goal} onChange={(event) => setProfile({ ...profile, goal: event.target.value })} rows={3} />
-            </label>
+                <div className="profile-panel-actions compact">
+                  <button className="primary-button" type="button" onClick={startNewPlanDraft}>
+                    <CalendarDays size={16} />
+                    Tạo lộ trình mới
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="profile-form-grid">
+                  <label>
+                    Chủ đề
+                    <div className="topic-combobox">
+                      <input
+                        required
+                        value={profile.topic}
+                        onBlur={() => setIsTopicInputFocused(false)}
+                        onChange={(event) => setProfile({ ...profile, topic: event.target.value })}
+                        onFocus={() => setIsTopicInputFocused(true)}
+                      />
+                      {savedTopicOptions.length > 0 && (
+                        <div className="topic-suggestions">
+                          {savedTopicOptions.map((topic) => (
+                            <button key={topic.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applySavedTopic(topic)}>
+                              <strong>{topic.topic}</strong>
+                              <span>{topic.goal}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </label>
 
-            <div className="two-cols">
-              <label>
-                Trình độ
-                <select value={profile.level} onChange={(event) => setProfile({ ...profile, level: event.target.value })}>
-                  <option value="beginner">Beginner</option>
-                  <option value="intermediate">Intermediate</option>
-                  <option value="advanced">Advanced</option>
-                </select>
-              </label>
-              <label>
-                Tốc độ
-                <select value={profile.pace} onChange={(event) => setProfile({ ...profile, pace: event.target.value as LearnerProfile['pace'] })}>
-                  <option value="gentle">Nhẹ</option>
-                  <option value="normal">Vừa</option>
-                  <option value="intensive">Cấp tốc</option>
-                </select>
-              </label>
-            </div>
+                  <label>
+                    Mục tiêu
+                    <textarea value={profile.goal} onChange={(event) => setProfile({ ...profile, goal: event.target.value })} rows={3} />
+                  </label>
 
-            <div className="two-cols">
-              <label>
-                Số tuần
-                <input
-                  type="number"
-                  min={1}
-                  max={12}
-                  value={profile.durationWeeks}
-                  onChange={(event) => setProfile({ ...profile, durationWeeks: Number(event.target.value) })}
-                />
-              </label>
-              <label>
-                Giờ/tuần
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={profile.hoursPerWeek}
-                  onChange={(event) => setProfile({ ...profile, hoursPerWeek: Number(event.target.value) })}
-                />
-              </label>
-            </div>
+                  <div className="two-cols">
+                    <label>
+                      Trình độ
+                      <select value={profile.level} onChange={(event) => setProfile({ ...profile, level: event.target.value })}>
+                        <option value="beginner">Beginner</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="advanced">Advanced</option>
+                      </select>
+                    </label>
+                    <label>
+                      Tốc độ
+                      <select value={profile.pace} onChange={(event) => setProfile({ ...profile, pace: event.target.value as LearnerProfile['pace'] })}>
+                        <option value="gentle">Nhẹ</option>
+                        <option value="normal">Vừa</option>
+                        <option value="intensive">Cấp tốc</option>
+                      </select>
+                    </label>
+                  </div>
 
-            <label>
-              Phong cách học
-              <select value={profile.learningStyle} onChange={(event) => setProfile({ ...profile, learningStyle: event.target.value as LearnerProfile['learningStyle'] })}>
-                <option value="mixed">Kết hợp</option>
-                <option value="concepts">Khái niệm</option>
-                <option value="practice">Thực hành</option>
-                <option value="project">Project</option>
-              </select>
-            </label>
+                  <div className="two-cols">
+                    <label>
+                      Số tuần
+                      <input
+                        type="number"
+                        min={1}
+                        max={12}
+                        value={profile.durationWeeks}
+                        onChange={(event) => setProfile({ ...profile, durationWeeks: Number(event.target.value) })}
+                      />
+                    </label>
+                    <label>
+                      Giờ/tuần
+                      <input
+                        type="number"
+                        min={1}
+                        max={168}
+                        value={profile.hoursPerWeek}
+                        onChange={(event) => setProfile({ ...profile, hoursPerWeek: Number(event.target.value) })}
+                      />
+                    </label>
+                  </div>
 
-            <label>
-              Thời gian học ưu tiên
-              <select
-                value={profile.learningTimePreference}
-                onChange={(event) => setProfile({ ...profile, learningTimePreference: event.target.value as LearnerProfile['learningTimePreference'] })}
-              >
-                <option value="morning">Sáng</option>
-                <option value="noon">Trưa</option>
-                <option value="afternoon">Chiều</option>
-                <option value="evening">Tối</option>
-              </select>
-            </label>
+                  <label>
+                    Phong cách học
+                    <select value={profile.learningStyle} onChange={(event) => setProfile({ ...profile, learningStyle: event.target.value as LearnerProfile['learningStyle'] })}>
+                      <option value="mixed">Kết hợp</option>
+                      <option value="concepts">Khái niệm</option>
+                      <option value="practice">Thực hành</option>
+                      <option value="project">Project</option>
+                    </select>
+                  </label>
 
-            <label>
-              Ngôn ngữ video
-              <select value={profile.videoLanguage} onChange={(event) => setProfile({ ...profile, videoLanguage: event.target.value as LearnerProfile['videoLanguage'] })}>
-                <option value="vi">Tiếng Việt</option>
-                <option value="en">English</option>
-              </select>
-            </label>
+                  <label>
+                    Thời gian học ưu tiên
+                    <select
+                      value={profile.learningTimePreference}
+                      onChange={(event) => setProfile({ ...profile, learningTimePreference: event.target.value as LearnerProfile['learningTimePreference'] })}
+                    >
+                      <option value="morning">Sáng</option>
+                      <option value="noon">Trưa</option>
+                      <option value="afternoon">Chiều</option>
+                      <option value="evening">Tối</option>
+                    </select>
+                  </label>
 
-            <button className="primary-button" type="submit" disabled={isGenerating}>
-              {isGenerating ? <Loader2 className="spin" size={18} /> : <CalendarDays size={18} />}
-              Tạo lộ trình học
-            </button>
+                  <label>
+                    Ngôn ngữ video
+                    <select value={profile.videoLanguage} onChange={(event) => setProfile({ ...profile, videoLanguage: event.target.value as LearnerProfile['videoLanguage'] })}>
+                      <option value="vi">Tiếng Việt</option>
+                      <option value="en">English</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="profile-panel-actions">
+                  {plan && (
+                    <button className="secondary-button" type="button" onClick={closeProfileEditor}>
+                      Thu gọn hồ sơ
+                    </button>
+                  )}
+                  <button className="primary-button" type="submit" disabled={isGenerating}>
+                    {isGenerating ? <Loader2 className="spin" size={18} /> : <CalendarDays size={18} />}
+                    {editingPlanId ? 'Lưu chỉnh sửa' : plan ? 'Cập nhật lộ trình' : 'Tạo lộ trình học'}
+                  </button>
+                </div>
+
+                {profileError && <div className="form-error">{profileError}</div>}
+              </>
+            )}
 
             {savedPlans.length > 0 && (
               <div className="saved-plan-list">
@@ -973,56 +1494,69 @@ export default function Home() {
 
           <section className="plan-column">
             <div className="panel plan-summary">
-              <div>
+              <div className="plan-summary-main">
                 <div className="panel-heading">
                   <BookOpen size={18} />
                   <h2>{plan?.title || 'Lộ trình học'}</h2>
                 </div>
                 <p>{plan?.summary || 'Nhập hồ sơ học viên rồi tạo kế hoạch cá nhân hóa.'}</p>
                 {plan && (
-                  <div className="foundation-box">
-                    <div>
-                      <strong>Kiến thức nền tảng cần có</strong>
-                      <span>Bạn chọn {plan.profile.durationWeeks} tuần / gợi ý {plan.recommendedWeeks} tuần</span>
+                  <>
+                    <div className="plan-summary-meta">
+                      <span>{plan.profile.durationWeeks} tuần học</span>
+                      <span>{plan.profile.hoursPerWeek} giờ mỗi tuần</span>
+                      <span>{pacingLabel(plan.lessons[0]?.pacing)}</span>
                     </div>
-                    <p>{plan.durationAdvice}</p>
-                    <ul>
-                      {plan.prerequisites.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
+                    <div className="foundation-box compact">
+                      <div>
+                        <strong>Kiến thức nền tảng</strong>
+                        <span>Gợi ý {plan.recommendedWeeks} tuần</span>
+                      </div>
+                      <ul>
+                        {plan.prerequisites.map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </>
                 )}
               </div>
               <div className="progress-box">
-                <span>{progress}%</span>
+                <div className="progress-head">
+                  <strong>Tiến độ</strong>
+                  <span>{progress}%</span>
+                </div>
                 <div className="progress-track">
                   <div style={{ width: `${progress}%` }} />
                 </div>
+                {plan && <small>{plan.durationAdvice}</small>}
               </div>
             </div>
 
             <div className="lessons">
               {plan ? (
                 plan.lessons.map((lesson) => (
-                  <button
+                  <article
                     key={lesson.id}
                     className={`lesson-card ${selectedLesson?.id === lesson.id ? 'active' : ''}`}
-                    onClick={() => selectLesson(lesson.id)}
-                    type="button"
                   >
-                  <div className="lesson-head">
-                    <span>Tuần {lesson.week}</span>
-                    <small>{statusLabel[lesson.status]}</small>
-                  </div>
-                    <div className={`pacing-badge ${lesson.pacing || 'normal'}`}>{pacingLabel(lesson.pacing)}</div>
-                    <strong>{lesson.title}</strong>
-                    <p>{lesson.objective}</p>
-                    <div className="lesson-meta">
-                      <Clock size={15} />
-                      {lesson.durationMinutes} phút
+                    <div className="lesson-card-body">
+                      <div className="lesson-head">
+                        <span>Tuần {lesson.week}</span>
+                        <small>{statusLabel[lesson.status]}</small>
+                      </div>
+                      <div className={`pacing-badge ${lesson.pacing || 'normal'}`}>{pacingLabel(lesson.pacing)}</div>
+                      <strong>{lesson.title}</strong>
+                      <p>{lesson.objective}</p>
+                      <div className="lesson-meta">
+                        <Clock size={15} />
+                        {lesson.durationMinutes} phút
+                      </div>
                     </div>
-                  </button>
+                    <button className="lesson-card-action" onClick={() => selectLesson(lesson.id)} type="button">
+                      {lessonActionLabel(lesson, selectedLesson?.id === lesson.id)}
+                    </button>
+                  </article>
                 ))
               ) : (
                 <div className="empty-state">Kế hoạch sẽ xuất hiện ở đây sau khi tạo.</div>
@@ -1038,39 +1572,56 @@ export default function Home() {
 
             {selectedLesson ? (
               <div className="lesson-detail">
-                <div className="detail-title">
-                  <strong>{selectedLesson.title}</strong>
-                  <select value={selectedLesson.status} onChange={(event) => updateLessonStatus(selectedLesson.id, event.target.value as LessonStatus)}>
-                    <option value="todo">Chưa học</option>
-                    <option value="doing">Đang học</option>
-                    <option value="done">Hoàn thành</option>
-                    <option value="review">Cần ôn</option>
-                  </select>
+                <div className="detail-hero">
+                  <div>
+                    <p className="eyebrow">Bài đang chọn</p>
+                    <strong>{selectedLesson.title}</strong>
+                    <span>Tuần {selectedLesson.week} · {selectedLesson.durationMinutes} phút</span>
+                  </div>
+                  <div className="detail-hero-actions">
+                    <select
+                      value={selectedLesson.status}
+                      onChange={(event) => {
+                        const nextStatus = event.target.value as LessonStatus
+                        if (nextStatus === 'done') {
+                          void requestLessonCompletion(selectedLesson)
+                          return
+                        }
+                        updateLessonStatus(selectedLesson.id, nextStatus)
+                      }}
+                    >
+                      <option value="todo">Chưa học</option>
+                      <option value="doing">Đang học</option>
+                      {selectedLesson.status === 'done' && <option value="done">Hoàn thành</option>}
+                      <option value="review">Cần ôn</option>
+                    </select>
+                    <button className="complete-button inline" type="button" disabled={isQuizInProgress} onClick={() => void requestLessonCompletion(selectedLesson)}>
+                      <CheckCircle2 size={16} />
+                      Đánh dấu hoàn thành
+                    </button>
+                  </div>
                 </div>
-                <p>{selectedLesson.checkpoint}</p>
-                <ul>
-                  {selectedLesson.activities.map((activity) => (
-                    <li key={activity}>{activity}</li>
-                  ))}
-                </ul>
-                <div className="quiz-list">
-                  <strong>Quiz nhanh</strong>
-                  {selectedLesson.quiz.map((item) => (
-                    <p key={item}>{item}</p>
-                  ))}
+
+                <div className="detail-section">
+                  <span>Nội dung chính</span>
+                  <ul>
+                    <li>{selectedLesson.objective}</li>
+                    <li>{selectedLesson.checkpoint}</li>
+                  </ul>
                 </div>
-                <div className="learning-assets">
-                  <AssetList icon={<FileQuestion size={15} />} title="Bài tập về nhà" items={selectedLesson.homework} />
-                  <AssetList icon={<Link size={15} />} title="Tài liệu học tập" items={selectedLesson.recommendedResources?.length ? selectedLesson.recommendedResources : selectedLesson.resources} />
+
+                <div className="detail-section">
+                  <span>Hoạt động học tập</span>
+                  <ul>
+                    {selectedLesson.activities.map((activity) => (
+                      <li key={activity}>{activity}</li>
+                    ))}
+                  </ul>
                 </div>
-                <button className="complete-button" type="button" onClick={() => updateLessonStatus(selectedLesson.id, 'done')}>
-                  <CheckCircle2 size={16} />
-                  Đánh dấu hoàn thành
-                </button>
-                <button className="secondary-button" type="button" disabled={isQuizInProgress} onClick={() => openChatForLesson(selectedLesson)}>
-                  <MessageSquareText size={16} />
-                  Chuyển sang hỏi đáp
-                </button>
+
+                <div className="learning-assets compact single">
+                  <AssetList icon={<Link size={15} />} title="Tài liệu gợi ý" items={selectedLesson.recommendedResources?.length ? selectedLesson.recommendedResources : selectedLesson.resources} />
+                </div>
               </div>
             ) : (
               <div className="empty-state compact">Chọn hoặc tạo một bài học để xem gợi ý.</div>
@@ -1079,7 +1630,42 @@ export default function Home() {
         </section>
       ) : view === 'schedule' ? (
         <section className="schedule-workspace">
-          <aside className="panel schedule-sidebar">
+          <aside className="schedule-filter-sidebar">
+            <div className="schedule-filter-head">
+              <CalendarDays size={17} />
+              <strong>Lịch học</strong>
+            </div>
+            <div className="schedule-filter-section">
+              <span>Khóa học</span>
+              {schedulePlans.length > 0 ? (
+                schedulePlans.map((sourcePlan) => {
+                  const sourcePlanId = planStorageId(sourcePlan)
+                  return (
+                    <label className="schedule-filter-option" key={sourcePlanId}>
+                      <input checked={scheduleCourseFilters[sourcePlanId] !== false} type="checkbox" onChange={() => toggleScheduleCourseFilter(sourcePlanId)} />
+                      <span>{sourcePlan.profile.topic}</span>
+                    </label>
+                  )
+                })
+              ) : (
+                <p>Tạo lộ trình trước để có lịch học.</p>
+              )}
+            </div>
+            <div className="schedule-filter-section">
+              <span>Loại hoạt động</span>
+              {scheduleKindOptions.map((kind) => (
+                <label className="schedule-filter-option" key={kind.id}>
+                  <input checked={scheduleKindFilters[kind.id] !== false} type="checkbox" onChange={() => toggleScheduleKindFilter(kind.id)} />
+                  <i className={`kind-dot ${kind.id}`} />
+                  <span>{kind.label}</span>
+                </label>
+              ))}
+            </div>
+            <button className="schedule-filter-action" type="button" disabled={schedulePlans.length === 0} onClick={() => setScheduleEvents(buildParallelSchedule(schedulePlans))}>
+              Tự xếp lại
+            </button>
+          </aside>
+          <aside className="legacy-schedule-sidebar">
             <div className="panel-heading">
               <CalendarDays size={18} />
               <h2>Bài học có thể xếp lịch</h2>
@@ -1099,7 +1685,7 @@ export default function Home() {
                 const isExpanded = Boolean(expandedScheduleTopicIds[sourcePlanId])
                 return (
                   <div className="schedule-topic-group" key={sourcePlanId}>
-                    <button className={`schedule-topic-button ${isExpanded ? 'active' : ''}`} type="button" onClick={() => toggleScheduleTopic(sourcePlanId)}>
+                    <button className={`schedule-topic-button ${activeSchedulePlanId === sourcePlanId ? 'active' : ''}`} type="button" onClick={() => toggleScheduleTopic(sourcePlanId)}>
                       <strong>{sourcePlan.profile.topic}</strong>
                       <span>{sourcePlan.lessons.length} bài học · {sourcePlan.profile.hoursPerWeek} giờ/tuần</span>
                     </button>
@@ -1107,9 +1693,10 @@ export default function Home() {
                       <div className="schedule-lesson-list">
                         {sourcePlan.lessons.map((lesson) => (
                           <div
-                            className={`draggable-lesson ${activeScheduleWeek === lesson.week ? 'active' : ''}`}
+                            className={`draggable-lesson ${activeSchedulePlanId === sourcePlanId && activeScheduleWeek === lesson.week ? 'active' : ''} ${activeSchedulePlanId && activeSchedulePlanId !== sourcePlanId ? 'muted' : ''}`}
                             draggable
                             key={`${sourcePlanId}-${lesson.id}`}
+                            onClick={() => selectScheduleWeek(sourcePlan, lesson.week)}
                             onDragStart={(event) => {
                               event.dataTransfer.setData('lesson-id', lesson.id)
                               event.dataTransfer.setData('plan-id', sourcePlanId)
@@ -1136,61 +1723,178 @@ export default function Home() {
           </aside>
 
           <section className="panel schedule-board">
-            <div className="schedule-header">
-              <div>
-                <p className="eyebrow">Kéo thả lịch học</p>
-                <h2>Lịch học tuần {activeScheduleWeek}</h2>
-                <p>{scheduleLessons.filter((item) => item.lesson.week === activeScheduleWeek).map((item) => item.plan.profile.topic).join(' + ') || 'Chọn tuần để xem nội dung học tương ứng.'}</p>
+            <div className="gcal-header">
+              <div className="gcal-controls">
+                <button type="button" onClick={jumpToToday}>Hôm nay</button>
+                <button type="button" aria-label={scheduleNavigationLabel(calendarViewMode, -1)} onClick={() => shiftScheduleRange(-1)}>‹</button>
+                <button type="button" aria-label={scheduleNavigationLabel(calendarViewMode, 1)} onClick={() => shiftScheduleRange(1)}>›</button>
               </div>
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={schedulePlans.length === 0}
-                onClick={() => setScheduleEvents(buildParallelSchedule(schedulePlans))}
-              >
-                Tự xếp lại
-              </button>
-            </div>
-            {scheduleWeeks.length > 0 && (
-              <div className="week-tabs">
-                {scheduleWeeks.map((week) => (
-                  <button className={activeScheduleWeek === week ? 'active' : ''} key={week} type="button" onClick={() => setActiveScheduleWeek(week)}>
-                    Tuần {week}
+              <div className="gcal-title">
+                <p className="eyebrow">Lịch học</p>
+                <h2>{formatScheduleHeaderTitle(calendarViewMode, calendarMonthDate, selectedScheduleDate)}</h2>
+              </div>
+              <div className="gcal-controls">
+                <button type="button" onClick={jumpToToday}>Hôm nay</button>
+                <button type="button" aria-label={scheduleNavigationLabel(calendarViewMode, -1)} onClick={() => shiftScheduleRange(-1)}>‹</button>
+                <button type="button" aria-label={scheduleNavigationLabel(calendarViewMode, 1)} onClick={() => shiftScheduleRange(1)}>›</button>
+                {activeSchedulePlan && <button type="button" onClick={clearScheduleFocus}>Tất cả</button>}
+                <button type="button" disabled={schedulePlans.length === 0} onClick={() => setScheduleEvents(buildParallelSchedule(schedulePlans))}>
+                  Tự xếp lại
+                </button>
+              </div>
+              <div className="gcal-view-switch" aria-label="Chế độ xem lịch">
+                {(['month', 'week', 'day'] as CalendarViewMode[]).map((mode) => (
+                  <button className={calendarViewMode === mode ? 'active' : ''} key={mode} type="button" onClick={() => setCalendarViewMode(mode)}>
+                    {mode === 'month' ? 'Tháng' : mode === 'week' ? 'Tuần' : 'Ngày'}
                   </button>
                 ))}
               </div>
-            )}
-            <div className="calendar-grid">
-              <div className="calendar-corner" />
-              {scheduleDays.map((day) => (
-                <div className="calendar-day-head" key={day}>{day}</div>
-              ))}
-              {scheduleSlots.map((slot) => (
-                <Fragment key={slot}>
-                  <div className="calendar-time" key={`${slot}-time`}>{slot}</div>
-                  {scheduleDays.map((day) => {
-                    const events = visibleScheduleEvents.filter((item) => item.day === day && item.start === slot)
+            </div>
+
+            <div className={`gcal-layout ${calendarViewMode === 'day' ? 'day-detail-mode' : ''}`}>
+              <section className="gcal-month" onDragOver={handleScheduleDragOver} onDragLeave={clearScheduleDragSwitch} onDrop={clearScheduleDragSwitch}>
+                <div className="gcal-weekdays">
+                  {(calendarViewMode === 'week' ? selectedWeekDates.map((item) => item.day) : scheduleDays).map((day) => (
+                    <span key={day}>{day}</span>
+                  ))}
+                </div>
+                <div className={calendarViewMode === 'week' ? 'gcal-month-grid week-mode' : 'gcal-month-grid'}>
+                  {(calendarViewMode === 'week' ? selectedWeekDates.map((item) => ({ key: dateKey(item.date), date: item.date, isCurrentMonth: true, events: filteredScheduleEvents.filter((event) => sameDate(scheduleEventDate(event), item.date)) })) : calendarMonth.days).map((day) => {
+                    const isSelected = sameDate(day.date, selectedScheduleDate)
+                    const isToday = sameDate(day.date, new Date())
                     return (
-                      <div
-                        className="calendar-cell"
-                        key={`${day}-${slot}`}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => handleDropSchedule(event, day, slot)}
+                      <button
+                        className={`gcal-day ${day.isCurrentMonth ? '' : 'outside'} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                        key={day.key}
+                        type="button"
+                        onClick={() => selectScheduleDate(day.date)}
+                        onDragOver={handleScheduleDragOver}
+                        onDrop={(event) => handleMonthDayDrop(event, day.date)}
                       >
-                        {events.map((item) => (
-                          <div className={`schedule-event ${item.kind}`} draggable key={item.id} onDragStart={(event) => event.dataTransfer.setData('schedule-event-id', item.id)}>
-                            <strong>{item.title}</strong>
-                            <span>{item.start} - {item.end}</span>
-                            <button type="button" onClick={() => removeScheduleEvent(item.id)} aria-label="Xóa lịch">
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+                        <span className="gcal-day-number">{day.date.getDate()}</span>
+                        <div className="gcal-day-events">
+                          {day.events.slice(0, monthDayVisibleEventLimit).map((item) => {
+                            const isPlanActive = !activeSchedulePlanId || item.planId === activeSchedulePlanId
+                            return (
+                              <div
+                                className={`gcal-event-pill ${item.kind} ${isPlanActive ? '' : 'dimmed'}`}
+                                draggable
+                                key={item.id}
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  setEditingScheduleEvent(item)
+                                  selectScheduleDate(day.date)
+                                }}
+                                onDragStart={(event) => startScheduleEventDrag(event, item)}
+                              >
+                                <b>{item.start}</b>
+                                <span>{shortScheduleTitle(item.title)}</span>
+                              </div>
+                            )
+                          })}
+                          {day.events.length > monthDayVisibleEventLimit && <em>+{day.events.length - monthDayVisibleEventLimit} buổi khác</em>}
+                        </div>
+                      </button>
                     )
                   })}
-                </Fragment>
-              ))}
+                </div>
+              </section>
+
+              <aside className="gcal-day-panel">
+                <div className="gcal-day-panel-head">
+                  <div>
+                    <p className="eyebrow">Ngày được chọn</p>
+                    <h3>{new Intl.DateTimeFormat('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' }).format(selectedScheduleDate)}</h3>
+                  </div>
+                  <span>{selectedDayEvents.length} buổi</span>
+                </div>
+                <div className="gcal-day-summary">
+                  {selectedDayEvents.length > 0 ? (
+                    selectedDayEvents.map((item) => (
+                      <button
+                        className={`gcal-summary-event ${item.kind}`}
+                        draggable
+                        key={item.id}
+                        type="button"
+                        onClick={() => setEditingScheduleEvent(item)}
+                        onDragStart={(event) => startScheduleEventDrag(event, item)}
+                      >
+                        <strong>{item.start} - {item.end}</strong>
+                        <span>{shortScheduleTitle(item.title)}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="gcal-empty-day">Chưa có buổi học nào trong ngày này.</div>
+                  )}
+                </div>
+                <div className="gcal-day-panel-actions">
+                  <button type="button" onClick={() => addBlankScheduleEvent(selectedScheduleDate)}>Thêm buổi học</button>
+                  <button type="button" onClick={() => setCalendarViewMode('day')}>Xem chi tiết ngày</button>
+                  <button className="gcal-back-month" type="button" onClick={() => setCalendarViewMode('month')}>Quay lại Month View</button>
+                </div>
+                <div className="gcal-timeline">
+                  {(() => {
+                    const timelineLayout = buildDayTimelineLayout(selectedDayEvents)
+                    const minuteHeight = 1.1
+                    const rowHeight = 66
+                    const timelineStartMinutes = timeToMinutes(dayTimelineSlots[0] || '06:00')
+                    const timelineEndMinutes = timeToMinutes(dayTimelineSlots[dayTimelineSlots.length - 1] || '23:00') + 60
+                    const timelineHeight = Math.max(dayTimelineSlots.length * rowHeight, Math.ceil((timelineEndMinutes - timelineStartMinutes) * minuteHeight))
+
+                    return (
+                      <div className="gcal-time-grid" style={{ minHeight: `${timelineHeight}px` }}>
+                        {dayTimelineSlots.map((slot) => (
+                          <div className="gcal-time-row" key={slot} onDragOver={(event) => event.preventDefault()} onDrop={(event) => handleTimelineDrop(event, selectedScheduleDate, slot)}>
+                            <span>{slot}</span>
+                            <div className="gcal-time-cell" />
+                          </div>
+                        ))}
+                        <div className="gcal-time-events-layer">
+                          {timelineLayout.map(({ event: item, column, columnCount, top, height }) => {
+                            const width = `calc(${100 / columnCount}% - 6px)`
+                            const left = `calc(${(100 / columnCount) * column}% + 3px)`
+                            return (
+                              <div
+                                className={`gcal-time-event ${item.kind}`}
+                                draggable
+                                key={item.id}
+                                onClick={() => setEditingScheduleEvent(item)}
+                                onDragStart={(event) => startScheduleEventDrag(event, item)}
+                                style={{ top: `${top}px`, minHeight: `${height}px`, height: `${height}px`, left, width }}
+                              >
+                                <button
+                                  className="resize-handle top"
+                                  draggable
+                                  type="button"
+                                  aria-label="Kéo để đổi giờ bắt đầu"
+                                  onDragStart={(event) => {
+                                    event.stopPropagation()
+                                    event.dataTransfer.setData('schedule-event-id', item.id)
+                                    event.dataTransfer.setData('resize-edge', 'start')
+                                  }}
+                                />
+                                <strong>{item.title}</strong>
+                                <span>{item.start} - {item.end}</span>
+                                <button
+                                  className="resize-handle bottom"
+                                  draggable
+                                  type="button"
+                                  aria-label="Kéo để đổi giờ kết thúc"
+                                  onDragStart={(event) => {
+                                    event.stopPropagation()
+                                    event.dataTransfer.setData('schedule-event-id', item.id)
+                                    event.dataTransfer.setData('resize-edge', 'end')
+                                  }}
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </aside>
             </div>
           </section>
         </section>
@@ -1199,20 +1903,40 @@ export default function Home() {
           <aside className="panel video-sidebar">
             <div className="panel-heading">
               <PlaySquare size={18} />
-              <h2>Video theo bài</h2>
+              <h2>Video theo lộ trình</h2>
             </div>
-            {plan ? (
-              plan.lessons.map((lesson) => (
-                <button
-                  className={activeVideoLesson?.id === lesson.id ? 'active' : ''}
-                  key={lesson.id}
-                  type="button"
-                  onClick={() => setActiveVideoLessonId(lesson.id)}
-                >
-                  <strong>Tuần {lesson.week}</strong>
-                  <span>{lesson.title}</span>
-                </button>
-              ))
+            {schedulePlans.length > 0 ? (
+              schedulePlans.map((sourcePlan) => {
+                const sourcePlanId = planStorageId(sourcePlan)
+                const isExpanded = Boolean(expandedVideoTopicIds[sourcePlanId])
+                const isActivePlan = activeVideoPlan && planStorageId(activeVideoPlan) === sourcePlanId
+                return (
+                  <div className="video-topic-group" key={sourcePlanId}>
+                    <button className={`schedule-topic-button ${isActivePlan ? 'active' : ''}`} type="button" onClick={() => toggleVideoTopic(sourcePlan)}>
+                      <strong>{sourcePlan.profile.topic}</strong>
+                      <span>{sourcePlan.lessons.length} bài học · {sourcePlan.profile.hoursPerWeek} giờ/tuần</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="video-lesson-list">
+                        {sourcePlan.lessons.map((lesson) => {
+                          const hasVideo = Boolean(getLessonScopedValue<VideoAnalysis | null>(videoAnalysisByLesson, sourcePlan, lesson, null))
+                          return (
+                            <button
+                              className={isActivePlan && activeVideoLesson?.id === lesson.id ? 'active' : ''}
+                              key={`${sourcePlanId}-${lesson.id}`}
+                              type="button"
+                              onClick={() => selectVideoLesson(sourcePlan, lesson)}
+                            >
+                              <strong>Tuần {lesson.week}: {lesson.title}</strong>
+                              <span>{hasVideo ? 'Đã lưu video gợi ý' : 'Chưa có video gợi ý'}</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
             ) : (
               <div className="empty-state compact">Tạo lộ trình trước, sau đó nhập YouTube URL để tìm đoạn phù hợp.</div>
             )}
@@ -1227,9 +1951,6 @@ export default function Home() {
                     <h2>{activeVideoLesson.title}</h2>
                     <p>{activeVideoLesson.objective}</p>
                   </div>
-                  <button className="secondary-button" type="button" disabled={isQuizInProgress} onClick={() => openChatForLesson(activeVideoLesson)}>
-                    Hỏi tutor
-                  </button>
                 </div>
 
                 <div className="video-study-grid">
@@ -1237,16 +1958,16 @@ export default function Home() {
                 <form className="video-url-form" onSubmit={analyzeVideo}>
                   <input
                     value={youtubeUrl}
-                    onChange={(event) => activeVideoLesson && setYoutubeUrlByLesson((current) => ({ ...current, [activeVideoLesson.id]: event.target.value }))}
+                    onChange={(event) => activeVideoStateKey && setYoutubeUrlByLesson((current) => ({ ...current, [activeVideoStateKey]: event.target.value }))}
                     placeholder="YouTube URL sẽ được LLM gợi ý, hoặc bạn có thể dán tay..."
                   />
-                  <button className="primary-button" type="submit" disabled={!plan || !youtubeUrl.trim() || isAnalyzingVideo}>
+                  <button className="primary-button" type="submit" disabled={!activeVideoPlan || !youtubeUrl.trim() || isAnalyzingVideo}>
                     {isAnalyzingVideo ? <Loader2 className="spin" size={18} /> : <PlaySquare size={18} />}
                     Phân tích
                   </button>
                 </form>
 
-                <button className="secondary-button video-suggest-button" type="button" disabled={!plan || isSuggestingVideo || isAnalyzingVideo} onClick={() => suggestAndAnalyzeVideo()}>
+                <button className="secondary-button video-suggest-button" type="button" disabled={!activeVideoPlan || isSuggestingVideo || isAnalyzingVideo} onClick={() => suggestAndAnalyzeVideo()}>
                   {isSuggestingVideo ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
                   Gợi ý video bằng LLM và phân tích
                 </button>
@@ -1319,48 +2040,6 @@ export default function Home() {
                 ) : null}
 
                   </div>
-
-                  <aside className="video-mini-tutor">
-                    <div className="mini-tutor-header">
-                      <div>
-                        <strong>AI tutor</strong>
-                        <span>{activeVideoLesson.title}</span>
-                      </div>
-                      <small>{videoMessages.filter((message) => !isLessonSupportMessage(message)).length} tin</small>
-                    </div>
-                    <div className="mini-tutor-log">
-                      {videoMessages.slice(-5).map((message) => (
-                        <div key={message.id} className={`message ${message.role}`}>
-                          {message.role === 'assistant' ? <AssistantMessage content={message.content} /> : message.content}
-                        </div>
-                      ))}
-                      {isAsking && activeChatLessonId === activeVideoLesson.id && (
-                        <div className="message assistant pending">
-                          <Loader2 className="spin" size={16} />
-                          Đang trả lời...
-                        </div>
-                      )}
-                    </div>
-                    <div className="quick-support mini-tutor-actions">
-                      <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => setVideoQuestion(`Giải thích dễ hiểu hơn bài "${activeVideoLesson.title}"`)}>
-                        Giải thích
-                      </button>
-                      <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => setVideoQuestion(`Cho tôi ví dụ áp dụng cho bài "${activeVideoLesson.title}"`)}>
-                        Ví dụ
-                      </button>
-                    </div>
-                    <form className="mini-tutor-form" onSubmit={askVideoTutor}>
-                      <input
-                        value={videoQuestion}
-                        disabled={isAsking || isQuizInProgress}
-                        onChange={(event) => setVideoQuestion(event.target.value)}
-                        placeholder={isQuizInProgress ? 'Hoàn thành quiz trước khi hỏi tutor...' : 'Hỏi nhanh về video này...'}
-                      />
-                      <button type="submit" disabled={!videoQuestion.trim() || isAsking || isQuizInProgress}>
-                        <CheckCircle2 size={16} />
-                      </button>
-                    </form>
-                  </aside>
                 </div>
               </>
             ) : (
@@ -1373,23 +2052,38 @@ export default function Home() {
           <aside className="panel video-sidebar">
             <div className="panel-heading">
               <FileQuestion size={18} />
-              <h2>Quiz theo tuần</h2>
+              <h2>Quiz theo lộ trình</h2>
             </div>
-            {plan ? (
-              plan.lessons.map((lesson) => (
-                <button
-                  className={activeVideoLesson?.id === lesson.id ? 'active' : ''}
-                  key={lesson.id}
-                  type="button"
-                  disabled={isQuizInProgress && lesson.id !== activeQuizSessionLessonId}
-                  onClick={() => {
-                    setActiveVideoLessonId(lesson.id)
-                  }}
-                >
-                  <strong>Tuần {lesson.week}</strong>
-                  <span>{lesson.title}</span>
-                </button>
-              ))
+            {schedulePlans.length > 0 ? (
+              schedulePlans.map((sourcePlan) => {
+                const sourcePlanId = planStorageId(sourcePlan)
+                const isExpanded = Boolean(expandedQuizTopicIds[sourcePlanId])
+                const isActivePlan = activeVideoPlan && planStorageId(activeVideoPlan) === sourcePlanId
+                return (
+                  <div className="video-topic-group" key={sourcePlanId}>
+                    <button className={`schedule-topic-button ${isActivePlan ? 'active' : ''}`} type="button" onClick={() => toggleQuizTopic(sourcePlan)}>
+                      <strong>{sourcePlan.profile.topic}</strong>
+                      <span>{sourcePlan.lessons.length} tuần · {sourcePlan.profile.hoursPerWeek} giờ/tuần</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="video-lesson-list">
+                        {sourcePlan.lessons.map((lesson) => (
+                          <button
+                            className={isActivePlan && activeVideoLesson?.id === lesson.id ? 'active' : ''}
+                            key={`${sourcePlanId}-${lesson.id}`}
+                            type="button"
+                            disabled={isQuizInProgress && lesson.id !== activeQuizSessionLessonId}
+                            onClick={() => selectQuizLesson(sourcePlan, lesson)}
+                          >
+                            <strong>Tuần {lesson.week}</strong>
+                            <span>{lesson.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })
             ) : (
               <div className="empty-state compact">Tạo lộ trình và phân tích video trước khi làm quiz.</div>
             )}
@@ -1411,7 +2105,7 @@ export default function Home() {
                     </span>
                   </div>
                   <div className="quiz-actions">
-                    <button className="secondary-button" type="button" disabled={!plan || isGeneratingQuiz || isQuizInProgress} onClick={generateLessonQuiz}>
+                    <button className="secondary-button" type="button" disabled={!activeVideoPlan || isGeneratingQuiz || isQuizInProgress} onClick={() => void generateLessonQuiz()}>
                       {isGeneratingQuiz ? <Loader2 className="spin" size={18} /> : <FileQuestion size={18} />}
                       {activeQuiz ? 'Tạo lại bài kiểm tra' : 'Tạo bài kiểm tra'}
                     </button>
@@ -1427,7 +2121,7 @@ export default function Home() {
 
                 {isQuizInProgress && (
                   <div className="quiz-lock-note">
-                    Đang làm quiz. Tất cả tab khác và AI tutor tạm khóa cho đến khi bạn bấm Hoàn thành.
+                    Đang làm quiz. Tất cả tab khác và phần hỏi đáp tạm khóa cho đến khi bạn bấm Hoàn thành.
                   </div>
                 )}
 
@@ -1442,6 +2136,11 @@ export default function Home() {
                             {activeQuizResult.correctCount}/{activeQuizResult.totalQuestions} câu đúng, đã trả lời {activeQuizResult.answeredCount}/{activeQuizResult.totalQuestions} câu.
                           </small>
                         </div>
+                        <p>
+                          {activeQuizResult.scorePercent > 70
+                            ? 'Đạt yêu cầu trên 7 điểm. Tuần học này được đánh dấu hoàn thành.'
+                            : 'Chưa đạt yêu cầu trên 7 điểm. Tuần học chưa được đánh dấu hoàn thành, bạn có thể làm lại quiz.'}
+                        </p>
                         {activeQuizResult.wrongQuestions.length > 0 ? (
                           <>
                             <p>Lỗi sai</p>
@@ -1526,7 +2225,7 @@ export default function Home() {
                 ) : activeQuiz ? (
                   <div className="quiz-start-card">
                     <strong>Sẵn sàng làm bài kiểm tra tuần {activeVideoLesson.week}</strong>
-                    <p>Bấm Bắt đầu để mở câu hỏi. Trong lúc làm quiz, các tab khác và AI tutor sẽ bị khóa. Điểm số và đáp án chỉ hiện sau khi bấm Hoàn thành.</p>
+                    <p>Bấm Bắt đầu để mở câu hỏi. Trong lúc làm quiz, các tab khác và phần hỏi đáp sẽ bị khóa. Điểm số và đáp án chỉ hiện sau khi bấm Hoàn thành.</p>
                   </div>
                 ) : (
                   <p className="quiz-empty">Bấm Tạo bài kiểm tra để sinh bài tập đánh giá trình độ theo đúng chủ đề của tuần học.</p>
@@ -1559,17 +2258,38 @@ export default function Home() {
                     {isExpanded && (
                       <div className="chat-lesson-list">
                         {topic.lessons.map((lesson) => {
-                          const count = (chatHistoryByLesson[lesson.id] || []).filter((message) => !isLessonSupportMessage(message)).length
+                          const sessions = chatSessionsByLesson[lesson.id] || []
+                          const isActiveLesson = activeChatLessonId === lesson.id
+                          const count = sessions.reduce((total, session) => total + session.messages.filter((message) => !isLessonSupportMessage(message)).length, 0)
                           return (
-                            <button
-                              className={activeChatLessonId === lesson.id ? 'active' : ''}
-                              key={lesson.id}
-                              type="button"
-                              onClick={() => selectChatLesson(topic, lesson)}
-                            >
-                              <span>Tuần {lesson.week}: {lesson.title}</span>
-                              <small>{count} tin</small>
-                            </button>
+                            <div className="chat-lesson-group" key={lesson.id}>
+                              <button
+                                className={isActiveLesson ? 'active' : ''}
+                                type="button"
+                                onClick={() => selectChatLesson(topic, lesson)}
+                              >
+                                <span>Tuần {lesson.week}: {lesson.title}</span>
+                                <small>{sessions.length || 1} phiên · {count} tin</small>
+                              </button>
+                              {isActiveLesson && (
+                                <div className="chat-session-list">
+                                  {sessions.map((session) => (
+                                    <button
+                                      className={selectedChatSession?.id === session.id ? 'active' : ''}
+                                      key={session.id}
+                                      type="button"
+                                      onClick={() => selectChatSession(lesson, session.id)}
+                                    >
+                                      <span>{session.title}</span>
+                                      <small>{session.messages.filter((message) => !isLessonSupportMessage(message)).length} tin</small>
+                                    </button>
+                                  ))}
+                                  <button className="new-chat-session" type="button" onClick={() => startNewChatSession(lesson)}>
+                                    + Phiên mới
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )
                         })}
                       </div>
@@ -1618,7 +2338,7 @@ export default function Home() {
                 <div className="chat-history-heading">
                   <div>
                     <h3>Lịch sử đoạn chat</h3>
-                    <p>{selectedChatTopic?.topic} / {selectedChatLesson.title}</p>
+                    <p>{selectedChatTopic?.topic} / {selectedChatLesson.title} / {selectedChatSession?.title || 'Phiên chat'}</p>
                   </div>
                   <span>{chatMessageCount} tin nhắn</span>
                 </div>
@@ -1643,7 +2363,7 @@ export default function Home() {
                 </div>
 
                 <form className="chat-form" onSubmit={askTutor}>
-                  <input value={question} disabled={isQuizInProgress} onChange={(event) => setQuestion(event.target.value)} placeholder={isQuizInProgress ? 'Hoàn thành quiz trước khi hỏi tutor...' : 'Hỏi tutor về bài học này...'} />
+                  <input value={question} disabled={isQuizInProgress} onChange={(event) => setQuestion(event.target.value)} placeholder={isQuizInProgress ? 'Hoàn thành quiz trước khi hỏi đáp...' : 'Hỏi đáp về bài học này...'} />
                   <button type="submit" disabled={!selectedChatLesson || isAsking || isQuizInProgress}>
                     <CheckCircle2 size={18} />
                   </button>
@@ -1659,6 +2379,62 @@ export default function Home() {
             )}
           </section>
         </section>
+      )}
+      {editingScheduleEvent && (
+        <div className="schedule-modal-backdrop" role="presentation" onMouseDown={() => setEditingScheduleEvent(null)}>
+          <form className="schedule-modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={saveScheduleEvent}>
+            <div className="schedule-modal-head">
+              <div>
+                <p className="eyebrow">Chỉnh sửa buổi học</p>
+                <h2>{editingScheduleEvent.title}</h2>
+              </div>
+              <button type="button" onClick={() => setEditingScheduleEvent(null)} aria-label="Đóng">
+                ×
+              </button>
+            </div>
+            <label>
+              Tên buổi học
+              <input name="title" defaultValue={editingScheduleEvent.title} />
+            </label>
+            <div className="three-cols">
+              <label>
+                Ngày học
+                <input name="date" type="date" defaultValue={formatInputDate(scheduleEventDate(editingScheduleEvent))} />
+              </label>
+              <label>
+                Bắt đầu
+                <input name="start" type="time" defaultValue={editingScheduleEvent.start} />
+              </label>
+              <label>
+                Kết thúc
+                <input name="end" type="time" defaultValue={editingScheduleEvent.end} />
+              </label>
+            </div>
+            <label>
+              Trạng thái học
+              <select name="status" defaultValue={editingScheduleEvent.status || 'planned'}>
+                <option value="planned">Đã lên lịch</option>
+                <option value="done">Đã học</option>
+                <option value="skipped">Bỏ qua</option>
+              </select>
+            </label>
+            <label>
+              Ghi chú
+              <textarea name="note" defaultValue={editingScheduleEvent.note || ''} rows={3} />
+            </label>
+            <div className="schedule-modal-actions">
+              <button className="danger-button" type="button" onClick={() => removeScheduleEvent(editingScheduleEvent.id)}>
+                Xóa
+              </button>
+              <button className="secondary-button" type="button" onClick={() => setEditingScheduleEvent(null)}>
+                Hủy
+              </button>
+              <button className="primary-button" type="submit">
+                Lưu
+              </button>
+            </div>
+          </form>
+        </div>
       )}
     </main>
   )
@@ -1709,6 +2485,18 @@ function filterRecordByKeys<T>(record: Record<string, T>, keys: Set<string>, kee
   return Object.fromEntries(Object.entries(record).filter(([key]) => (keepMatching ? keys.has(key) : !keys.has(key))))
 }
 
+function filterRecordByPrefix<T>(record: Record<string, T>, prefix: string, keepMatching: boolean) {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => (keepMatching ? key.startsWith(prefix) : !key.startsWith(prefix))))
+}
+
+function videoStateKey(plan: LearningPlan, lesson: Lesson) {
+  return `${planStorageId(plan)}:${lesson.id}`
+}
+
+function getLessonScopedValue<T>(record: Record<string, T>, plan: LearningPlan, lesson: Lesson, fallback: T): T {
+  return record[videoStateKey(plan, lesson)] ?? fallback
+}
+
 function pruneChatDataForPlans(plans: LearningPlan[], topics: ChatTopic[], history: ChatHistoryByLesson) {
   const validTopicIds = new Set(plans.map((item) => buildChatTopic(item).id))
   const validLessonIds = new Set(plans.flatMap((item) => item.lessons.map((lesson) => lesson.id)))
@@ -1716,6 +2504,72 @@ function pruneChatDataForPlans(plans: LearningPlan[], topics: ChatTopic[], histo
     topics: topics.filter((topic) => validTopicIds.has(topic.id)),
     history: filterRecordByKeys(history, validLessonIds, true)
   }
+}
+
+function normalizeChatSessionsByLesson(legacyHistory: ChatHistoryByLesson, sessions: ChatSessionsByLesson): ChatSessionsByLesson {
+  const next: ChatSessionsByLesson = {}
+  const lessonIds = new Set([...Object.keys(legacyHistory), ...Object.keys(sessions)])
+  lessonIds.forEach((lessonId) => {
+    const currentSessions = sessions[lessonId]
+    if (Array.isArray(currentSessions) && currentSessions.length > 0) {
+      next[lessonId] = currentSessions
+        .filter((session) => session && Array.isArray(session.messages))
+        .map((session, index) => ({
+          id: session.id || stableChatSessionId(lessonId, index),
+          title: normalizeChatSessionTitle(session.title, session.messages),
+          createdAt: session.createdAt || new Date().toISOString(),
+          updatedAt: session.updatedAt || session.createdAt || new Date().toISOString(),
+          messages: session.messages
+        }))
+      return
+    }
+
+    const messages = legacyHistory[lessonId] || []
+    if (messages.length > 0) {
+      next[lessonId] = [
+        {
+          id: stableChatSessionId(lessonId, 0),
+          title: 'Phiên chat cũ',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messages
+        }
+      ]
+    }
+  })
+  return next
+}
+
+function pruneActiveChatSessionIds(activeIds: Record<string, string>, sessions: ChatSessionsByLesson) {
+  return Object.fromEntries(Object.entries(activeIds).filter(([lessonId, sessionId]) => sessions[lessonId]?.some((session) => session.id === sessionId)))
+}
+
+function stableChatSessionId(lessonId: string, index: number) {
+  return `${lessonId}-chat-${index + 1}`
+}
+
+function createChatSession(lesson: Lesson, index: number): ChatSession {
+  const now = new Date().toISOString()
+  return {
+    id: crypto.randomUUID(),
+    title: 'Chưa có câu hỏi',
+    createdAt: now,
+    updatedAt: now,
+    messages: [buildLessonSupportMessage(lesson)]
+  }
+}
+
+function buildChatSessionTitle(session: ChatSession, messages: ChatMessage[]) {
+  const firstUserMessage = messages.find((message) => message.role === 'user')?.content.trim()
+  if (!firstUserMessage) return session.title
+  return firstUserMessage.length > 42 ? `${firstUserMessage.slice(0, 39)}...` : firstUserMessage
+}
+
+function normalizeChatSessionTitle(title: string | undefined, messages: ChatMessage[]) {
+  const firstUserMessage = messages.find((message) => message.role === 'user')?.content.trim()
+  if (firstUserMessage) return firstUserMessage.length > 42 ? `${firstUserMessage.slice(0, 39)}...` : firstUserMessage
+  if (title && !/^Phiên chat/i.test(title.trim())) return title
+  return 'Chưa có câu hỏi'
 }
 
 function sameTopicIds(left: ChatTopic[], right: ChatTopic[]) {
@@ -1745,10 +2599,11 @@ function videoJobKey(plan: LearningPlan, lesson: Lesson) {
 
 function normalizeLoadedPlan(plan: LearningPlan): LearningPlan {
   const profile = normalizeLoadedProfile(plan.profile)
+  const lessons = normalizeLessonList(plan.lessons || [], profile)
   return {
     ...plan,
     profile,
-    lessons: normalizeLessonList(plan.lessons || [], profile)
+    lessons: rebalanceLessonDurations(lessons, profile)
   }
 }
 
@@ -1790,6 +2645,27 @@ function normalizeLessonList(lessons: Lesson[], profile: LearnerProfile) {
       status: lesson.status || 'todo'
     }
   })
+}
+
+function rebalanceLessonDurations(lessons: Lesson[], profile: LearnerProfile) {
+  if (lessons.length === 0) return lessons
+  const totalMinutes = Math.max(lessons.length * 30, Math.round(profile.durationWeeks * profile.hoursPerWeek * 60))
+  const weights = lessons.map((lesson) => lessonDurationWeight(lesson.pacing))
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || lessons.length
+  const rounded = weights.map((weight) => Math.max(30, Math.round((totalMinutes * weight) / totalWeight / 5) * 5))
+  const delta = totalMinutes - rounded.reduce((sum, value) => sum + value, 0)
+  rounded[rounded.length - 1] = Math.max(30, rounded[rounded.length - 1] + delta)
+
+  return lessons.map((lesson, index) => ({
+    ...lesson,
+    durationMinutes: rounded[index]
+  }))
+}
+
+function lessonDurationWeight(pacing: Lesson['pacing']) {
+  if (pacing === 'deep') return 1.35
+  if (pacing === 'skim') return 0.65
+  return 1
 }
 
 function buildInitialSchedule(lessons: Lesson[], preference: LearnerProfile['learningTimePreference'] = 'evening'): ScheduleEvent[] {
@@ -1896,6 +2772,251 @@ function addMinutesToTime(value: string, minutes: number) {
   return `${String(nextHour).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`
 }
 
+function timeToMinutes(value: string) {
+  const [hour, minute] = value.split(':').map(Number)
+  return hour * 60 + minute
+}
+
+function startOfWeek(date: Date) {
+  const next = new Date(date)
+  const day = next.getDay()
+  const diff = day === 0 ? -6 : 1 - day
+  next.setHours(0, 0, 0, 0)
+  next.setDate(next.getDate() + diff)
+  return next
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function buildScheduleWeekDates(week: number) {
+  const monday = addDays(scheduleBaseMonday, (Math.max(1, week) - 1) * 7)
+  return scheduleDays.map((day, index) => ({
+    day,
+    date: addDays(monday, index)
+  }))
+}
+
+function buildMonthCalendar(monthDate: Date, events: ScheduleEvent[]) {
+  const monthStart = startOfMonth(monthDate)
+  const monthEnd = endOfMonth(monthDate)
+  const gridStart = startOfWeek(monthStart)
+  const gridEnd = addDays(startOfWeek(monthEnd), 6)
+  const days = []
+
+  for (let day = gridStart; day <= gridEnd; day = addDays(day, 1)) {
+    const key = dateKey(day)
+    days.push({
+      key,
+      date: day,
+      isCurrentMonth: day.getMonth() === monthStart.getMonth(),
+      events: events.filter((event) => dateKey(scheduleEventDate(event)) === key).sort((left, right) => left.start.localeCompare(right.start))
+    })
+  }
+
+  return {
+    id: monthKey(monthStart),
+    days
+  }
+}
+
+function buildDayTimelineLayout(events: ScheduleEvent[]) {
+  const minuteHeight = 1.1
+  const timelineStart = timeToMinutes(dayTimelineSlots[0] || '06:00')
+  const sorted = [...events].sort((left, right) => {
+    const startDelta = timeToMinutes(left.start) - timeToMinutes(right.start)
+    if (startDelta !== 0) return startDelta
+    return timeToMinutes(left.end) - timeToMinutes(right.end)
+  })
+
+  const layouts: Array<{ event: ScheduleEvent; column: number; columnCount: number; top: number; height: number }> = []
+  const active: Array<{ end: number; column: number }> = []
+
+  sorted.forEach((event) => {
+    const start = timeToMinutes(event.start)
+    const end = Math.max(start + 30, timeToMinutes(event.end))
+
+    for (let index = active.length - 1; index >= 0; index -= 1) {
+      if (active[index].end <= start) active.splice(index, 1)
+    }
+
+    let column = 0
+    while (active.some((item) => item.column === column)) column += 1
+    active.push({ end, column })
+
+    const top = Math.max(0, Math.round((start - timelineStart) * minuteHeight))
+    const height = Math.max(34, Math.round((end - start) * minuteHeight) - 4)
+
+    layouts.push({
+      event,
+      column,
+      columnCount: Math.max(...active.map((item) => item.column), column) + 1,
+      top,
+      height
+    })
+  })
+
+  return layouts.map((layout) => {
+    const layoutStart = timeToMinutes(layout.event.start)
+    const layoutEnd = Math.max(layoutStart + 30, timeToMinutes(layout.event.end))
+    const overlapping = layouts.filter((candidate) => {
+      const candidateStart = timeToMinutes(candidate.event.start)
+      const candidateEnd = Math.max(candidateStart + 30, timeToMinutes(candidate.event.end))
+      return candidateStart < layoutEnd && candidateEnd > layoutStart
+    })
+
+    return {
+      ...layout,
+      columnCount: Math.max(layout.columnCount, overlapping.reduce((max, item) => Math.max(max, item.column + 1), 1))
+    }
+  })
+}
+
+function scheduleWeekFromDate(date: Date) {
+  const diffMs = startOfWeek(date).getTime() - scheduleBaseMonday.getTime()
+  return Math.max(1, Math.round(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1)
+}
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function sameDate(left: Date, right: Date) {
+  return dateKey(left) === dateKey(right)
+}
+
+function monthKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function startOfMonth(date: Date) {
+  const next = new Date(date)
+  next.setDate(1)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function endOfMonth(date: Date) {
+  const next = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+  next.setHours(0, 0, 0, 0)
+  return next
+}
+
+function addMonths(date: Date, months: number) {
+  const next = new Date(date)
+  next.setMonth(next.getMonth() + months)
+  return next
+}
+
+function scheduleEventDate(event: ScheduleEvent) {
+  const dayIndex = Math.max(0, scheduleDays.indexOf(event.day))
+  return addDays(scheduleBaseMonday, (Math.max(1, event.week) - 1) * 7 + dayIndex)
+}
+
+function buildScheduleMonths(plans: LearningPlan[], events: ScheduleEvent[], activePlanId: string | null) {
+  const relevantEvents = events.filter((event) => !activePlanId || event.planId === activePlanId)
+  const maxWeek = Math.max(1, ...plans.filter((sourcePlan) => !activePlanId || planStorageId(sourcePlan) === activePlanId).flatMap((sourcePlan) => sourcePlan.lessons.map((lesson) => lesson.week)))
+  const eventDates = relevantEvents.map(scheduleEventDate).sort((left, right) => left.getTime() - right.getTime())
+  const firstDate = eventDates[0] || scheduleBaseMonday
+  const lastDate = eventDates[eventDates.length - 1] || addDays(scheduleBaseMonday, (maxWeek - 1) * 7 + 6)
+  const firstMonth = startOfMonth(firstDate)
+  const lastMonth = startOfMonth(lastDate)
+  const months = []
+
+  for (let cursor = firstMonth; cursor <= lastMonth; cursor = addMonths(cursor, 1)) {
+    const monthStart = startOfMonth(cursor)
+    const monthEnd = endOfMonth(cursor)
+    const gridStart = startOfWeek(monthStart)
+    const gridEnd = addDays(startOfWeek(monthEnd), 6)
+    const days = []
+
+    for (let day = gridStart; day <= gridEnd; day = addDays(day, 1)) {
+      const key = dateKey(day)
+      days.push({
+        key,
+        date: day,
+        isCurrentMonth: day.getMonth() === monthStart.getMonth(),
+        events: events
+          .filter((event) => dateKey(scheduleEventDate(event)) === key)
+          .sort((left, right) => left.start.localeCompare(right.start))
+      })
+    }
+
+    months.push({
+      id: monthKey(monthStart),
+      label: new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(monthStart),
+      events: relevantEvents.filter((event) => monthKey(scheduleEventDate(event)) === monthKey(monthStart)),
+      days
+    })
+  }
+
+  return months
+}
+
+function formatCalendarDate(date: Date) {
+  return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit' }).format(date)
+}
+
+function formatInputDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function formatDateRange(start: Date, end: Date) {
+  return `${new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(start)} - ${new Intl.DateTimeFormat('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(end)}`
+}
+
+function formatScheduleHeaderTitle(view: CalendarViewMode, calendarMonthDate: Date, selectedScheduleDate: Date) {
+  if (view === 'day') {
+    return new Intl.DateTimeFormat('vi-VN', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    }).format(selectedScheduleDate)
+  }
+
+  if (view === 'week') {
+    const weekStart = startOfWeek(selectedScheduleDate)
+    const weekEnd = addDays(weekStart, 6)
+    return `Tuần ${formatDateRange(weekStart, weekEnd)}`
+  }
+
+  return new Intl.DateTimeFormat('vi-VN', { month: 'long', year: 'numeric' }).format(calendarMonthDate)
+}
+
+function scheduleNavigationLabel(view: CalendarViewMode, offset: number) {
+  const direction = offset < 0 ? 'trước' : 'sau'
+  if (view === 'day') return `Ngày ${direction}`
+  if (view === 'week') return `Tuần ${direction}`
+  return `Tháng ${direction}`
+}
+
+function shortScheduleTitle(title: string) {
+  return title
+    .replace(/^([^:]+):\s*/, '')
+    .replace(/^(Quiz|Thực hành|Ôn tập):\s*/i, '')
+    .replace(/\s*\/\s*/g, ' · ')
+    .slice(0, 64)
+}
+
+function setScheduleDragPreview(event: DragEvent<HTMLElement>, label: string) {
+  const preview = document.createElement('div')
+  preview.className = 'schedule-drag-preview'
+  preview.textContent = label
+  document.body.appendChild(preview)
+  event.dataTransfer.setDragImage(preview, 18, 18)
+  requestAnimationFrame(() => {
+    preview.remove()
+  })
+}
+
 function secondsToTimestamp(value: number) {
   const total = Math.max(0, Math.floor(value))
   const hours = Math.floor(total / 3600)
@@ -1938,7 +3059,8 @@ function buildTutorVideoReferences(
   topic: ChatTopic,
   analysisByLesson: Record<string, VideoAnalysis>
 ) {
-  const analysis = analysisByLesson[lesson.id]
+  const scopedKey = `${planStorageId(topicToPlan(topic))}:${lesson.id}`
+  const analysis = analysisByLesson[scopedKey] || analysisByLesson[lesson.id]
   if (!analysis) return []
 
   const lessonMatches = selectDistinctVideoMatches(topic.lessons, analysis, lesson.id)
@@ -2108,6 +3230,25 @@ function pacingLabel(pacing: Lesson['pacing']) {
   return 'Bình thường'
 }
 
+function learnerLevelLabel(level: LearnerProfile['level']) {
+  if (level === 'advanced') return 'Nâng cao'
+  if (level === 'intermediate') return 'Trung cấp'
+  return 'Cơ bản'
+}
+
+function learningStyleLabel(style: LearnerProfile['learningStyle']) {
+  if (style === 'concepts') return 'Khái niệm'
+  if (style === 'practice') return 'Thực hành'
+  if (style === 'project') return 'Project'
+  return 'Kết hợp'
+}
+
+function lessonActionLabel(lesson: Lesson, isSelected: boolean) {
+  if (isSelected) return 'Đang xem'
+  if (lesson.status === 'doing') return 'Học tiếp'
+  return 'Xem bài học'
+}
+
 function slugify(value: string) {
   return (
     value
@@ -2175,7 +3316,8 @@ function formatAssetItem(item: unknown) {
   if (item && typeof item === 'object') {
     const record = item as Record<string, unknown>
     const title = firstString(record.title, record.name, record.text, record.label, record.description, record.reason, record.searchKeyword)
-    const url = firstString(record.url, record.link, record.href)
+    const directUrl = firstString(record.url, record.link, record.href)
+    const url = directUrl
     const detailParts = [
       firstString(record.type) ? `[${firstString(record.type)}]` : '',
       title,
@@ -2192,6 +3334,25 @@ function formatAssetItem(item: unknown) {
   }
 
   return null
+}
+
+function hasConcreteRecommendedResourceUrl(url: unknown) {
+  if (typeof url !== 'string') return false
+  const trimmed = url.trim()
+  if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) return false
+
+  try {
+    const parsed = new URL(trimmed)
+    const host = parsed.hostname.toLowerCase()
+    const path = parsed.pathname.toLowerCase()
+    if (host.includes('google.') && path === '/search') return false
+    if ((host === 'www.youtube.com' || host === 'youtube.com') && path === '/results') return false
+    if (host === 'www.bing.com' && path === '/search') return false
+    if (host === 'search.yahoo.com') return false
+    return true
+  } catch {
+    return false
+  }
 }
 
 function formatStringAssetItem(item: string): FormattedAssetItem | null {

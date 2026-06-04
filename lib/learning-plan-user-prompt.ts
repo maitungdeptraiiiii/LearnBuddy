@@ -25,7 +25,8 @@ Yêu cầu quan trọng:
 - Nếu tốc độ học nhanh, hãy tăng độ nén, độ khó và ưu tiên tài liệu nâng cao.
 - Nếu tốc độ học chậm, hãy chia nhỏ nội dung, thêm ví dụ và phần ôn tập.
 - Không được tạo nội dung chung chung.
-- Không bịa tên video cụ thể; chỉ gợi ý loại tài liệu/video hoặc từ khóa tìm kiếm.
+- Với recommendedResources, hãy ưu tiên trả về link cụ thể có thể truy cập trực tiếp vào video, bài viết hoặc tài liệu.
+- Không dùng link trang kết quả tìm kiếm Google, YouTube search hoặc homepage quá chung chung nếu có thể chọn trang chi tiết hơn.
 - Mỗi lesson phải khác nhau rõ ràng về title, objective, activities, homework, resources, checkpoint và quiz.
 
 Trả về JSON theo schema hiện tại của LearnBuddy:
@@ -67,6 +68,7 @@ Trả về JSON theo schema hiện tại của LearnBuddy:
         {
           "type": "video | article | documentation | exercise | project",
           "primaryLanguage": "Vietnamese | English",
+          "url": "string (optional, direct link to the exact resource, not a search page)",
           "searchKeyword": "string",
           "englishKeywords": ["string"],
           "vietnameseKeywords": ["string"],

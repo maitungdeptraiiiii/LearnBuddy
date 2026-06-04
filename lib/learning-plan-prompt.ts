@@ -67,10 +67,13 @@ Nguyên tắc bắt buộc:
   + Mỗi tuần hoàn thành một phần của project.
 
 4. Cá nhân hóa theo số tuần:
-- Lộ trình phải có đúng số tuần người dùng nhập trong durationWeeks.
-- Không được tạo thừa hoặc thiếu tuần.
-- Nếu số tuần ít, hãy gom nội dung quan trọng.
-- Nếu số tuần nhiều, hãy chia nhỏ và thêm checkpoint/ôn tập.
+- Lộ trình hiển thị phải có đúng số tuần người dùng nhập trong durationWeeks.
+- Trường recommendedWeeks là số tuần hệ thống đề xuất theo độ khó, mục tiêu, trình độ và thời gian/tuần; recommendedWeeks KHÔNG nhất thiết phải bằng durationWeeks.
+- recommendedWeeks có thể lớn hơn durationWeeks nếu khối lượng học khó hoặc người học có ít thời gian.
+- recommendedWeeks có thể nhỏ hơn durationWeeks nếu người học có nhiều thời gian hoặc mục tiêu hẹp/dễ.
+- Nếu durationWeeks ít hơn recommendedWeeks, hãy gắn pacing="skim" cho một số tuần kiến thức đơn giản hoặc ít liên quan, và pacing="deep" cho phần nền tảng/khó/quan trọng.
+- Nếu durationWeeks nhiều hơn recommendedWeeks, hãy dùng pacing="deep" cho các kiến thức quan trọng, thêm bài thực hành, ôn tập và mở rộng thay vì kéo dài chung chung.
+- durationAdvice phải giải thích rõ vì sao recommendedWeeks khác durationWeeks và tuần nào nên học lướt/học kỹ.
 
 5. Cá nhân hóa theo số giờ/tuần:
 - Nếu số giờ/tuần thấp:
@@ -79,7 +82,9 @@ Nguyên tắc bắt buộc:
 - Nếu số giờ/tuần cao:
   + Có thể thêm bài đọc, bài tập nâng cao, project hoặc quiz.
 - Không giao khối lượng học vượt quá thời gian người dùng có.
-- durationMinutes mỗi lesson nên phù hợp với hoursPerWeek.
+- Tổng durationMinutes của tất cả lessons phải bằng durationWeeks * hoursPerWeek * 60.
+- Không chia đều máy móc: tuần pacing="deep" hoặc kiến thức quan trọng/khó phải có durationMinutes lớn hơn; tuần pacing="skim" hoặc kiến thức đơn giản/ít liên quan phải có durationMinutes nhỏ hơn.
+- durationMinutes mỗi lesson vẫn phải hợp lý với hoursPerWeek và giải thích được trong hoạt động "Thời gian phân bổ".
 
 6. Cá nhân hóa theo mục tiêu:
 - Nếu mục tiêu là học khái niệm:
@@ -96,9 +101,15 @@ Nguyên tắc bắt buộc:
   + Gợi ý loại video/tài liệu bằng tiếng Anh.
 - Nếu videoLanguage là vi/Vietnamese:
   + Ưu tiên loại video/tài liệu tiếng Việt.
-- Không bịa tên video cụ thể. Nếu không chắc có video phù hợp, chỉ ghi loại video hoặc từ khóa nên tìm.
 
-8. Không được trả lời chung chung.
+8. Link tài liệu cụ thể:
+- Mỗi item trong recommendedResources PHẢI có trường url nếu bạn biết một trang/video/bài viết cụ thể phù hợp.
+- Ưu tiên link trực tiếp tới video, bài viết, tài liệu chính thức, tutorial cụ thể.
+- KHÔNG trả về link trang kết quả tìm kiếm như Google Search, YouTube search, Bing search.
+- KHÔNG trả về homepage quá chung chung nếu có thể chọn trang chi tiết hơn.
+- Nếu thật sự không chắc, có thể để trống url nhưng vẫn phải giữ searchKeyword hữu ích.
+
+9. Không được trả lời chung chung.
 Mỗi tuần phải có:
 - Tên tuần
 - Mục tiêu tuần
@@ -110,11 +121,11 @@ Mỗi tuần phải có:
 - Gợi ý tài liệu/video
 - Thời gian phân bổ dựa trên số giờ/tuần
 
-9. Không được tạo nội dung mẫu chung chung.
+10. Không được tạo nội dung mẫu chung chung.
 Nếu thiếu dữ liệu quan trọng, hãy trả về JSON có trường "error" mô tả dữ liệu thiếu.
 Nếu dữ liệu không hợp lệ, hãy trả về JSON có trường "error" mô tả lỗi.
 
-10. Output bắt buộc là JSON hợp lệ.
+11. Output bắt buộc là JSON hợp lệ.
 Không thêm markdown.
 Không thêm giải thích ngoài JSON.
 
@@ -146,6 +157,7 @@ Schema JSON bắt buộc khi dữ liệu hợp lệ:
         {
           "type": "video | article | documentation | exercise | project",
           "primaryLanguage": "Vietnamese | English",
+          "url": "string (optional, direct link to the exact resource, not a search page)",
           "searchKeyword": "string",
           "englishKeywords": ["string"],
           "vietnameseKeywords": ["string"],

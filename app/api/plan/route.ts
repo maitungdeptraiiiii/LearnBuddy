@@ -4,6 +4,7 @@ import { LEARNING_PLAN_SYSTEM_PROMPT } from '@/lib/learning-plan-prompt'
 import { buildLearningPlanUserPrompt } from '@/lib/learning-plan-user-prompt'
 import type { LearnerProfile, LearningPlan, Lesson, LessonStatus, PrerequisiteRelationship, RecommendedResource, ResourceLanguage, ResourceLevel, ResourceType } from '@/lib/types'
 import { lawRagChatJson } from '@/lib/law-rag-llm'
+import { enrichRecommendedResourceLinks, normalizeRecommendedResourceUrl } from '@/lib/recommended-resource-links'
 
 export async function POST(request: Request) {
   const profile = (await request.json()) as LearnerProfile
@@ -49,12 +50,20 @@ async function normalizeLearningPlan(parsed: unknown, profile: LearnerProfile): 
   if (!parsed || typeof parsed !== 'object') return generateFallbackPlan(profile)
 
   const raw = parsed as Partial<LearningPlan>
-  const lessons = Array.isArray(raw.lessons) ? await Promise.all(raw.lessons.map((lesson, index) => normalizeLesson(lesson, index, profile))) : []
+  const normalizedLessons = Array.isArray(raw.lessons) ? await Promise.all(raw.lessons.map((lesson, index) => normalizeLesson(lesson, index, profile))) : []
 
-  if (lessons.length === 0) return generateFallbackPlan(profile)
+  if (normalizedLessons.length === 0) return generateFallbackPlan(profile)
 
-  const requestedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || lessons.length))
+  const requestedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || normalizedLessons.length))
   const recommendedWeeks = normalizeRecommendedWeeks(raw.recommendedWeeks, profile)
+  const normalizedProfile = {
+    ...profile,
+    durationWeeks: requestedWeeks,
+    learningTimePreference: normalizeLearningTimePreference(profile.learningTimePreference),
+    videoLanguage: normalizeVideoLanguage(profile.videoLanguage)
+  }
+  const enrichedLessons = await enrichRecommendedResourceLinks(normalizedLessons, normalizedProfile, { refreshExisting: true })
+  const lessons = rebalanceLessonDurations(enrichedLessons, normalizedProfile)
 
   return {
     title: typeof raw.title === 'string' && raw.title.trim() ? raw.title : `Lộ trình học ${profile.topic}`,
@@ -63,12 +72,7 @@ async function normalizeLearningPlan(parsed: unknown, profile: LearnerProfile): 
     prerequisiteGraph: normalizePrerequisiteGraph(raw.prerequisiteGraph, normalizePrerequisites(raw.prerequisites), profile.topic),
     recommendedWeeks,
     durationAdvice: normalizeDurationAdvice(raw.durationAdvice, requestedWeeks, recommendedWeeks),
-    profile: {
-      ...profile,
-      durationWeeks: requestedWeeks,
-      learningTimePreference: normalizeLearningTimePreference(profile.learningTimePreference),
-      videoLanguage: normalizeVideoLanguage(profile.videoLanguage)
-    },
+    profile: normalizedProfile,
     lessons
   }
 }
@@ -188,6 +192,7 @@ function normalizeRecommendedResource(item: unknown, profile: LearnerProfile, le
   return {
     type: normalizeResourceType(record.type),
     primaryLanguage: normalizeResourceLanguage(record.primaryLanguage, profile.videoLanguage),
+    url: normalizeRecommendedResourceUrl(record.url),
     searchKeyword,
     englishKeywords: normalizeStringList(record.englishKeywords, [`${profile.topic} ${lessonTitle} explained`, `${profile.topic} ${lessonTitle} tutorial`]).slice(0, 6),
     vietnameseKeywords: normalizeStringList(record.vietnameseKeywords, [`giải thích ${profile.topic} ${lessonTitle}`, `hướng dẫn ${profile.topic} ${lessonTitle}`]).slice(0, 6),
@@ -212,4 +217,15 @@ function normalizeResourceLevel(value: unknown, level: string): ResourceLevel {
   if (level === 'advanced') return 'Advanced'
   if (level === 'intermediate') return 'Intermediate'
   return 'Beginner'
+}
+
+function rebalanceLessonDurations(lessons: Lesson[], profile: LearnerProfile) {
+  if (lessons.length === 0) return lessons
+  const totalMinutes = Math.max(lessons.length * 30, Math.round(profile.durationWeeks * profile.hoursPerWeek * 60))
+  const weights = lessons.map((lesson) => (lesson.pacing === 'deep' ? 1.35 : lesson.pacing === 'skim' ? 0.65 : 1))
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || lessons.length
+  const durations = weights.map((weight) => Math.max(30, Math.round((totalMinutes * weight) / totalWeight / 5) * 5))
+  const delta = totalMinutes - durations.reduce((sum, value) => sum + value, 0)
+  durations[durations.length - 1] = Math.max(30, durations[durations.length - 1] + delta)
+  return lessons.map((lesson, index) => ({ ...lesson, durationMinutes: durations[index] }))
 }

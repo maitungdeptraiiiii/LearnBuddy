@@ -1,11 +1,5 @@
 import type { LearnerProfile, LearningPlan, Lesson, PrerequisiteRelationship, RecommendedResource } from '@/lib/types'
 
-const paceMultiplier = {
-  gentle: 0.85,
-  normal: 1,
-  intensive: 1.2
-}
-
 const levelLabel: Record<string, string> = {
   beginner: 'người mới bắt đầu',
   intermediate: 'người đã có nền tảng',
@@ -42,16 +36,17 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
   const recommendedWeeks = estimateRecommendedWeeks(profile)
   const selectedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || recommendedWeeks))
   const durationAdvice = buildDurationAdvice(selectedWeeks, recommendedWeeks)
-  const minutes = Math.max(45, Math.round(profile.hoursPerWeek * 60 * paceMultiplier[profile.pace]))
   const phases = buildPhases(profile, selectedWeeks, topicProfile)
+  const pacings = phases.map((_, index) => getLessonPacing(index, selectedWeeks, recommendedWeeks))
+  const durations = distributeLessonDurations(selectedWeeks, profile.hoursPerWeek, pacings)
 
   const lessons: Lesson[] = phases.map((phase, index) => ({
     id: `week-${index + 1}-${slugify(`${profile.topic}-${profile.goal}`).slice(0, 24)}`,
     week: index + 1,
-    pacing: getLessonPacing(index, selectedWeeks, recommendedWeeks),
+    pacing: pacings[index],
     title: phase.title,
     objective: phase.objective,
-    durationMinutes: minutes,
+    durationMinutes: durations[index],
     activities: buildActivities(profile, topicProfile, index, selectedWeeks, durationAdvice),
     homework: buildHomework(profile, phase, index),
     resources: buildResources(profile, topicProfile, phase, index),
@@ -90,6 +85,16 @@ function getLessonPacing(index: number, selectedWeeks: number, recommendedWeeks:
   }
 
   return index === 0 || index === selectedWeeks - 1 ? 'deep' : 'normal'
+}
+
+function distributeLessonDurations(selectedWeeks: number, hoursPerWeek: number, pacings: LessonPacing[]) {
+  const totalMinutes = Math.max(selectedWeeks * 30, Math.round(selectedWeeks * hoursPerWeek * 60))
+  const weights = pacings.map((pacing) => (pacing === 'deep' ? 1.35 : pacing === 'skim' ? 0.65 : 1))
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0) || selectedWeeks
+  const durations = weights.map((weight) => Math.max(30, Math.round((totalMinutes * weight) / totalWeight / 5) * 5))
+  const delta = totalMinutes - durations.reduce((sum, value) => sum + value, 0)
+  durations[durations.length - 1] = Math.max(30, durations[durations.length - 1] + delta)
+  return durations
 }
 
 function buildDurationAdvice(selectedWeeks: number, recommendedWeeks: number) {
@@ -171,7 +176,6 @@ function analyzeTopic(topic: string): TopicProfile {
 }
 
 function recommendWeeks(profile: LearnerProfile, topicProfile: TopicProfile) {
-  const requestedWeeks = Math.max(1, Math.min(12, profile.durationWeeks || 1))
   const hours = Math.max(1, profile.hoursPerWeek || 1)
   const levelAdjustment = profile.level === 'beginner' ? 2 : profile.level === 'intermediate' ? 1 : 0
   const goalAdjustment = isAmbitiousGoal(profile.goal) ? 1 : 0
@@ -179,7 +183,7 @@ function recommendWeeks(profile: LearnerProfile, topicProfile: TopicProfile) {
   const hoursAdjustment = hours < 4 ? 2 : hours < 7 ? 1 : hours >= 12 ? -1 : 0
   const recommended = topicProfile.complexity + levelAdjustment + goalAdjustment + paceAdjustment + hoursAdjustment
 
-  return Math.max(requestedWeeks, Math.min(12, Math.max(2, recommended)))
+  return Math.min(12, Math.max(1, recommended))
 }
 
 function buildPhases(profile: LearnerProfile, totalWeeks: number, topicProfile: TopicProfile): PlanPhase[] {

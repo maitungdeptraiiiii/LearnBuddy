@@ -39,6 +39,7 @@ export type ResourceLevel = 'Beginner' | 'Intermediate' | 'Advanced'
 export interface RecommendedResource {
   type: ResourceType
   primaryLanguage: ResourceLanguage
+  url?: string
   searchKeyword: string
   englishKeywords: string[]
   vietnameseKeywords: string[]
