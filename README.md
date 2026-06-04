@@ -15,6 +15,26 @@ npm install
 npm run dev
 ```
 
+Configure the LLM directly in this project with `.env.local`:
+
+```powershell
+LLM_PROVIDER=openai
+OPENAI_API_KEY=<openai-api-key>
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_CHAT_MODEL=gpt-4.1-mini
+CHAT_MODEL=gpt-4.1-mini
+```
+
+For a local OpenAI-compatible runtime such as Ollama:
+
+```powershell
+LLM_PROVIDER=local
+LOCAL_LLM_BASE_URL=http://127.0.0.1:11434/v1
+LOCAL_LLM_API_KEY=local
+LOCAL_CHAT_MODEL=qwen2.5:7b-instruct
+CHAT_MODEL=qwen2.5:7b-instruct
+```
+
 Tạo file `.env.local` nếu muốn enrich video YouTube bằng metadata thật:
 
 ```powershell

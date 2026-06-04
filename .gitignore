@@ -27,10 +27,10 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
-.claude/
 
 # deployment caches
 .vercel/
+.understand-anything/
 
 # local demo/export artifacts not needed for this app
 learn-mate-frontend-demo/

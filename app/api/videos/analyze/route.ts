@@ -20,8 +20,11 @@ export async function POST(request: Request) {
 
 function friendlyVideoError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : ''
-  if (/video is not available|This video is not available|youtube/i.test(message)) {
+  if (/video is not available|this video is not available/i.test(message)) {
     return 'Video này hiện không khả dụng hoặc không lấy được dữ liệu từ YouTube. Hãy thử video khác.'
+  }
+  if (/yt-dlp|Command failed|youtube/i.test(message)) {
+    return 'Không lấy được dữ liệu video từ YouTube. Hãy thử video khác hoặc dán URL thủ công.'
   }
   return message ? message.split('\n')[0].slice(0, 220) : fallback
 }

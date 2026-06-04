@@ -13,14 +13,17 @@ export async function POST(request: Request) {
     const recommendation = await suggestYoutubeVideo(body.plan, body.lesson || null, body.excludedUrls || [])
     return NextResponse.json({ recommendation })
   } catch (error) {
-    return NextResponse.json({ error: friendlyVideoError(error, 'Không gợi ý được video.') }, { status: 400 })
+    return NextResponse.json({ error: friendlyVideoError(error, 'Không gợi ý được video phù hợp. Hãy thử nhập YouTube URL thủ công hoặc bấm lại sau.') }, { status: 400 })
   }
 }
 
 function friendlyVideoError(error: unknown, fallback: string) {
-  const message = error instanceof Error ? error.message : ''
-  if (/video is not available|This video is not available|youtube/i.test(message)) {
-    return 'Không gợi ý được video phù hợp hoặc video được chọn hiện không khả dụng. Hãy thử bấm gợi ý lại hoặc dán URL khác.'
+  const message = error instanceof Error ? error.message : String(error || '')
+  if (/video is not available|this video is not available|not available/i.test(message)) {
+    return 'Một số kết quả YouTube không khả dụng. Hãy bấm gợi ý lại hoặc dán URL video khác.'
   }
-  return message ? message.split('\n')[0].slice(0, 220) : fallback
+  if (/yt-dlp|Command failed|youtube|ytsearch/i.test(message)) {
+    return fallback
+  }
+  return message ? message.split('\n')[0].slice(0, 180) : fallback
 }

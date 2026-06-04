@@ -26,9 +26,25 @@ export interface Lesson {
   activities: string[]
   homework: string[]
   resources: string[]
+  recommendedResources?: RecommendedResource[]
   checkpoint: string
   quiz: string[]
   status: LessonStatus
+}
+
+export type ResourceType = 'video' | 'article' | 'documentation' | 'exercise' | 'project'
+export type ResourceLanguage = 'Vietnamese' | 'English'
+export type ResourceLevel = 'Beginner' | 'Intermediate' | 'Advanced'
+
+export interface RecommendedResource {
+  type: ResourceType
+  primaryLanguage: ResourceLanguage
+  searchKeyword: string
+  englishKeywords: string[]
+  vietnameseKeywords: string[]
+  level: ResourceLevel
+  learningStyleFit: string
+  whyRecommended: string
 }
 
 export interface VideoTranscriptSegment {
@@ -67,6 +83,25 @@ export interface VideoRecommendation {
 export interface VideoAnalysis {
   video: VideoIndex
   matchesByLessonId: Record<string, VideoSearchMatch[]>
+}
+
+export interface QuizQuestion {
+  id: string
+  question: string
+  options: string[]
+  correctIndex: number
+  explanation: string
+  difficulty?: 'simple' | 'advanced'
+  skillType?: 'concept' | 'application' | 'debugging' | 'design' | 'implementation'
+  sourceTitle?: string
+  sourceTimestamp?: string
+  sourceUrl?: string
+  sourceStartSeconds?: number
+}
+
+export interface LessonQuiz {
+  lessonId: string
+  questions: QuizQuestion[]
 }
 
 export interface PrerequisiteRelationship {

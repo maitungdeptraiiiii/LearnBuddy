@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, FormEvent, ReactNode, SetStateAction } from 'react'
+import type { DragEvent, FormEvent, ReactNode } from 'react'
 import {
   BookOpen,
   CalendarDays,
@@ -17,7 +17,7 @@ import {
   Sparkles,
   Trash2
 } from 'lucide-react'
-import type { ChatMessage, LearnerProfile, LearningPlan, Lesson, LessonStatus, VideoAnalysis, VideoRecommendation, VideoSearchMatch } from '@/lib/types'
+import type { ChatMessage, LearnerProfile, LearningPlan, Lesson, LessonQuiz, LessonStatus, QuizQuestion, VideoAnalysis, VideoRecommendation, VideoSearchMatch } from '@/lib/types'
 
 const initialProfile: LearnerProfile = {
   topic: 'Python cơ bản',
@@ -30,6 +30,7 @@ const initialProfile: LearnerProfile = {
   learningTimePreference: 'evening',
   videoLanguage: 'vi'
 }
+const blankProfile: LearnerProfile = { ...initialProfile, topic: '', goal: '' }
 
 const statusLabel: Record<LessonStatus, string> = {
   todo: 'Chưa học',
@@ -39,7 +40,7 @@ const statusLabel: Record<LessonStatus, string> = {
 }
 
 const scheduleDays = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'Chủ nhật']
-const scheduleSlots = ['07:00', '12:00', '14:00', '19:00']
+const scheduleSlots = ['07:00', '08:30', '10:00', '12:00', '14:00', '15:30', '17:00', '19:00', '20:30']
 const preferredScheduleStart = {
   morning: '07:00',
   noon: '12:00',
@@ -48,11 +49,14 @@ const preferredScheduleStart = {
 } satisfies Record<LearnerProfile['learningTimePreference'], string>
 
 const storageKey = 'learnmate-app-state-v2'
+const quizStorageVersion = 2
 
-type AppView = 'plan' | 'schedule' | 'videos' | 'chat'
+type AppView = 'plan' | 'schedule' | 'videos' | 'quiz' | 'chat'
 type ChatHistoryByLesson = Record<string, ChatMessage[]>
 type ScheduleEvent = {
   id: string
+  planId?: string
+  planTitle?: string
   lessonId: string
   week: number
   title: string
@@ -70,30 +74,19 @@ type ChatTopic = {
   lessons: Lesson[]
 }
 
-type SavedLearningPlan = LearningPlan & {
-  savedCopyId?: string
-}
-
-type TutorVideoReference = {
-  timestamp: string
-  title: string
-  summary: string
-  url: string
-  videoTitle: string
-  startSeconds: number
-  endSeconds: number
-  excerpt: string
-}
-
 type PersistedAppState = {
   profile: LearnerProfile
   plan: LearningPlan | null
-  savedPlans: SavedLearningPlan[]
+  savedPlans: LearningPlan[]
   selectedLessonId: string | null
   activeVideoLessonId: string | null
   youtubeUrlByLesson: Record<string, string>
   videoAnalysisByLesson: Record<string, VideoAnalysis>
   videoRecommendationByLesson: Record<string, VideoRecommendation>
+  quizByLesson: Record<string, LessonQuiz>
+  quizAnswersByLesson: Record<string, Record<string, number>>
+  quizSubmittedByLesson?: Record<string, boolean>
+  quizStorageVersion?: number
   youtubeUrl?: string
   videoAnalysis?: VideoAnalysis | null
   videoRecommendation?: VideoRecommendation | null
@@ -114,12 +107,17 @@ export default function Home() {
   const [youtubeUrlByLesson, setYoutubeUrlByLesson] = useState<Record<string, string>>({})
   const [videoAnalysisByLesson, setVideoAnalysisByLesson] = useState<Record<string, VideoAnalysis>>({})
   const [videoRecommendationByLesson, setVideoRecommendationByLesson] = useState<Record<string, VideoRecommendation>>({})
-  const [videoStartByLesson, setVideoStartByLesson] = useState<Record<string, number>>({})
-  const [analyzingVideoByLesson, setAnalyzingVideoByLesson] = useState<Record<string, boolean>>({})
-  const [suggestingVideoByLesson, setSuggestingVideoByLesson] = useState<Record<string, boolean>>({})
+  const [videoPlayerStartByLesson, setVideoPlayerStartByLesson] = useState<Record<string, number>>({})
+  const [quizByLesson, setQuizByLesson] = useState<Record<string, LessonQuiz>>({})
+  const [quizAnswersByLesson, setQuizAnswersByLesson] = useState<Record<string, Record<string, number>>>({})
+  const [quizSubmittedByLesson, setQuizSubmittedByLesson] = useState<Record<string, boolean>>({})
+  const [activeQuizSessionLessonId, setActiveQuizSessionLessonId] = useState<string | null>(null)
+  const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false)
+  const [isSuggestingVideo, setIsSuggestingVideo] = useState(false)
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false)
   const [isProcessingVideoBatch, setIsProcessingVideoBatch] = useState(false)
-  const [videoStatusByLesson, setVideoStatusByLesson] = useState<Record<string, string>>({})
-  const [videoErrorByLesson, setVideoErrorByLesson] = useState<Record<string, string>>({})
+  const [videoBatchStatus, setVideoBatchStatus] = useState('')
+  const [videoError, setVideoError] = useState('')
   const [activeChatTopicId, setActiveChatTopicId] = useState<string | null>(null)
   const [activeChatLessonId, setActiveChatLessonId] = useState<string | null>(null)
   const [chatTopics, setChatTopics] = useState<ChatTopic[]>([])
@@ -128,14 +126,14 @@ export default function Home() {
   const [videoQuestion, setVideoQuestion] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAsking, setIsAsking] = useState(false)
-  const [savedPlans, setSavedPlans] = useState<SavedLearningPlan[]>([])
-  const [duplicatePlanDraft, setDuplicatePlanDraft] = useState<LearningPlan | null>(null)
+  const [savedPlans, setSavedPlans] = useState<LearningPlan[]>([])
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
+  const [isTopicInputFocused, setIsTopicInputFocused] = useState(false)
+  const [expandedScheduleTopicIds, setExpandedScheduleTopicIds] = useState<Record<string, boolean>>({})
+  const [expandedChatTopicIds, setExpandedChatTopicIds] = useState<Record<string, boolean>>({})
   const autoSuggestedVideoKeysRef = useRef<Set<string>>(new Set())
   const chatLogRef = useRef<HTMLDivElement | null>(null)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
-  const videoChatLogRef = useRef<HTMLDivElement | null>(null)
-  const videoChatEndRef = useRef<HTMLDivElement | null>(null)
 
   const selectedLesson = useMemo(
     () => plan?.lessons.find((lesson) => lesson.id === selectedLessonId) || plan?.lessons[0] || null,
@@ -155,21 +153,36 @@ export default function Home() {
   const youtubeUrl = activeVideoLessonIdKey ? youtubeUrlByLesson[activeVideoLessonIdKey] || '' : ''
   const videoAnalysis = activeVideoLessonIdKey ? videoAnalysisByLesson[activeVideoLessonIdKey] || null : null
   const videoRecommendation = activeVideoLessonIdKey ? videoRecommendationByLesson[activeVideoLessonIdKey] || null : null
-  const activeVideoStart = activeVideoLessonIdKey ? videoStartByLesson[activeVideoLessonIdKey] || 0 : 0
-  const activeVideoEmbedUrl = youtubeEmbedUrl(videoAnalysis?.video.url || videoRecommendation?.url || youtubeUrl, activeVideoStart)
-  const isAnalyzingActiveVideo = activeVideoLessonIdKey ? Boolean(analyzingVideoByLesson[activeVideoLessonIdKey]) : false
-  const isSuggestingActiveVideo = activeVideoLessonIdKey ? Boolean(suggestingVideoByLesson[activeVideoLessonIdKey]) : false
-  const activeVideoStatus = activeVideoLessonIdKey ? videoStatusByLesson[activeVideoLessonIdKey] || '' : ''
-  const activeVideoError = activeVideoLessonIdKey ? videoErrorByLesson[activeVideoLessonIdKey] || '' : ''
   const activeVideoMatches = activeVideoLesson && videoAnalysis && plan ? selectDistinctVideoMatches(plan.lessons, videoAnalysis, activeVideoLesson.id) : []
+  const activeQuizVideoMatches = activeVideoLesson && videoAnalysis ? buildQuizVideoMatches(videoAnalysis, activeVideoLesson.id, activeVideoMatches) : []
+  const activeVideoStartSeconds = activeVideoLessonIdKey ? videoPlayerStartByLesson[activeVideoLessonIdKey] || 0 : 0
+  const activeYoutubeEmbedUrl = videoAnalysis ? youtubeEmbedUrl(videoAnalysis.video.url, activeVideoStartSeconds) : ''
+  const activeQuiz = activeVideoLessonIdKey ? quizByLesson[activeVideoLessonIdKey] || null : null
+  const activeQuizAnswers = activeVideoLessonIdKey ? quizAnswersByLesson[activeVideoLessonIdKey] || {} : {}
+  const activeQuizResult = useMemo(() => (activeQuiz ? buildQuizResult(activeQuiz, activeQuizAnswers) : null), [activeQuiz, activeQuizAnswers])
+  const isActiveQuizStarted = activeQuizSessionLessonId === activeVideoLessonIdKey
+  const isActiveQuizSubmitted = activeVideoLessonIdKey ? Boolean(quizSubmittedByLesson[activeVideoLessonIdKey]) : false
+  const canCompleteActiveQuiz = Boolean(activeQuiz && activeQuizResult && activeQuizResult.answeredCount === activeQuizResult.totalQuestions)
+  const schedulePlans = useMemo(() => {
+    const plans = plan ? upsertSavedPlan(savedPlans, plan) : savedPlans
+    return plans.map(normalizeLoadedPlan)
+  }, [savedPlans, plan])
+  const scheduleLessons = schedulePlans.flatMap((item) =>
+    item.lessons.map((lesson) => ({
+      plan: item,
+      lesson
+    }))
+  )
+  const scheduleWeeks = Array.from(new Set(scheduleLessons.map((item) => item.lesson.week))).sort((a, b) => a - b)
   const visibleScheduleEvents = scheduleEvents.filter((event) => event.week === activeScheduleWeek)
+  const isQuizInProgress = Boolean(activeQuizSessionLessonId)
   const messages = selectedChatLesson ? chatHistoryByLesson[selectedChatLesson.id] || [] : []
-  const videoMessages = activeVideoLesson ? chatHistoryByLesson[activeVideoLesson.id] || [] : []
+  const videoMessages = activeVideoLesson ? chatHistoryByLesson[activeVideoLesson.id] || [buildLessonSupportMessage(activeVideoLesson)] : []
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
-  const videoChatMessageCount = videoMessages.filter((message) => !isLessonSupportMessage(message)).length
   const savedTopicOptions = chatTopics
     .filter((topic) => {
       const query = profile.topic.trim()
+      if (!isTopicInputFocused || query.length < 2) return false
       return shouldSuggestTopic(topic.topic, query)
     })
     .slice(0, 4)
@@ -190,24 +203,51 @@ export default function Home() {
 
       const parsed = JSON.parse(saved) as Partial<PersistedAppState>
       const restoredPlan = parsed.plan ? normalizeLoadedPlan(parsed.plan) : null
-      setProfile(normalizeLoadedProfile(parsed.profile || initialProfile))
+      const restoredSavedPlans = Array.isArray(parsed.savedPlans) ? parsed.savedPlans.filter(isLearningPlanLike).map(normalizeLoadedPlan) : []
+      const restoredSchedulePlans = restoredPlan ? upsertSavedPlan(restoredSavedPlans, restoredPlan) : restoredSavedPlans
+      const restoredRawChatTopics = Array.isArray(parsed.chatTopics) ? parsed.chatTopics : restoredPlan ? [buildChatTopic(restoredPlan)] : []
+      const restoredChatData = pruneChatDataForPlans(restoredSchedulePlans, restoredRawChatTopics, parsed.chatHistoryByLesson || {})
+      setProfile(blankProfile)
       setPlan(restoredPlan)
-      setSavedPlans(Array.isArray(parsed.savedPlans) ? parsed.savedPlans.filter(isLearningPlanLike).map(normalizeLoadedPlan) : [])
+      setSavedPlans(restoredSavedPlans)
       setSelectedLessonId(parsed.selectedLessonId || restoredPlan?.lessons[0]?.id || null)
       setActiveVideoLessonId(parsed.activeVideoLessonId || restoredPlan?.lessons[0]?.id || null)
       setYoutubeUrlByLesson(parsed.youtubeUrlByLesson || legacyLessonMap(restoredPlan, parsed.youtubeUrl || ''))
       setVideoAnalysisByLesson(parsed.videoAnalysisByLesson || legacyLessonMap(restoredPlan, parsed.videoAnalysis || null))
       setVideoRecommendationByLesson(parsed.videoRecommendationByLesson || legacyLessonMap(restoredPlan, parsed.videoRecommendation || null))
-      setScheduleEvents(Array.isArray(parsed.scheduleEvents) ? parsed.scheduleEvents : restoredPlan ? buildInitialSchedule(restoredPlan.lessons, restoredPlan.profile.learningTimePreference) : [])
+      setQuizByLesson(parsed.quizStorageVersion === quizStorageVersion ? parsed.quizByLesson || {} : {})
+      setQuizAnswersByLesson(parsed.quizStorageVersion === quizStorageVersion ? parsed.quizAnswersByLesson || {} : {})
+      setQuizSubmittedByLesson(parsed.quizStorageVersion === quizStorageVersion ? parsed.quizSubmittedByLesson || {} : {})
+      setScheduleEvents(buildParallelSchedule(restoredSchedulePlans))
       setActiveScheduleWeek(parsed.activeScheduleWeek || restoredPlan?.lessons[0]?.week || 1)
-      setChatTopics(Array.isArray(parsed.chatTopics) ? parsed.chatTopics : restoredPlan ? [buildChatTopic(restoredPlan)] : [])
-      setChatHistoryByLesson(parsed.chatHistoryByLesson || {})
+      setChatTopics(restoredChatData.topics)
+      setChatHistoryByLesson(restoredChatData.history)
     } catch {
       // Ignore corrupted localStorage and start with a clean session.
     } finally {
       setHasLoadedStorage(true)
     }
   }, [])
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ block: 'end' })
+  }, [messages.length, isAsking, activeChatLessonId])
+
+  useEffect(() => {
+    if (!hasLoadedStorage) return
+    const validPlans = plan ? upsertSavedPlan(savedPlans, plan) : savedPlans
+    const cleaned = pruneChatDataForPlans(validPlans, chatTopics, chatHistoryByLesson)
+    if (!sameTopicIds(cleaned.topics, chatTopics)) {
+      setChatTopics(cleaned.topics)
+    }
+    if (!sameRecordKeys(cleaned.history, chatHistoryByLesson)) {
+      setChatHistoryByLesson(cleaned.history)
+    }
+    if (activeChatTopicId && !cleaned.topics.some((topic) => topic.id === activeChatTopicId)) {
+      setActiveChatTopicId(null)
+      setActiveChatLessonId(null)
+    }
+  }, [hasLoadedStorage, plan, savedPlans, chatTopics, chatHistoryByLesson, activeChatTopicId])
 
   useEffect(() => {
     if (!hasLoadedStorage) return
@@ -221,6 +261,10 @@ export default function Home() {
       youtubeUrlByLesson,
       videoAnalysisByLesson,
       videoRecommendationByLesson,
+      quizByLesson,
+      quizAnswersByLesson,
+      quizSubmittedByLesson,
+      quizStorageVersion,
       scheduleEvents,
       activeScheduleWeek,
       chatTopics,
@@ -237,6 +281,9 @@ export default function Home() {
     youtubeUrlByLesson,
     videoAnalysisByLesson,
     videoRecommendationByLesson,
+    quizByLesson,
+    quizAnswersByLesson,
+    quizSubmittedByLesson,
     scheduleEvents,
     activeScheduleWeek,
     chatTopics,
@@ -254,35 +301,6 @@ export default function Home() {
     void suggestAndAnalyzeAllVideos(plan)
   }, [hasLoadedStorage, plan])
 
-  useEffect(() => {
-    if (view !== 'chat' || !selectedChatLesson) return
-
-    const frame = requestAnimationFrame(() => {
-      chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      chatLogRef.current?.scrollTo({ top: chatLogRef.current.scrollHeight, behavior: 'smooth' })
-    })
-
-    return () => cancelAnimationFrame(frame)
-  }, [view, selectedChatLesson, messages.length, isAsking])
-
-  useEffect(() => {
-    if (view !== 'videos' || !plan || !activeVideoLesson) return
-    const topic = buildChatTopic(plan)
-    setChatTopics((current) => upsertChatTopic(current, topic))
-    ensureLessonChat(activeVideoLesson)
-  }, [view, plan, activeVideoLesson])
-
-  useEffect(() => {
-    if (view !== 'videos' || !activeVideoLesson) return
-
-    const frame = requestAnimationFrame(() => {
-      videoChatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-      videoChatLogRef.current?.scrollTo({ top: videoChatLogRef.current.scrollHeight, behavior: 'smooth' })
-    })
-
-    return () => cancelAnimationFrame(frame)
-  }, [view, activeVideoLesson, videoMessages.length, isAsking])
-
   async function generatePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsGenerating(true)
@@ -294,43 +312,30 @@ export default function Home() {
     })
     const payload = await response.json()
     const nextPlan = normalizeLoadedPlan(payload.plan as LearningPlan)
+    const firstLesson = nextPlan.lessons[0] || null
+    const nextTopic = buildChatTopic(nextPlan)
+    const nextSavedPlans = upsertSavedPlan(savedPlans, nextPlan)
+    const nextPlanId = planStorageId(nextPlan)
 
-    if (findSavedPlanByName(savedPlans, nextPlan.profile.topic)) {
-      setDuplicatePlanDraft(nextPlan)
-      setIsGenerating(false)
-      return
-    }
-
-    applyGeneratedPlan(nextPlan, 'save')
-    setIsGenerating(false)
-  }
-
-  function applyGeneratedPlan(nextPlan: LearningPlan, saveMode: 'save' | 'keep-both' | 'replace') {
-    const planToApply = saveMode === 'keep-both' ? withSavedCopyId(nextPlan) : normalizeLoadedPlan(nextPlan)
-    const firstLesson = planToApply.lessons[0] || null
-    const nextTopic = buildChatTopic(planToApply)
-
-    setPlan(planToApply)
-    setSavedPlans((current) => {
-      if (saveMode === 'replace') return upsertSavedPlan(removeSavedPlansByName(current, planToApply.profile.topic), planToApply)
-      return upsertSavedPlan(current, planToApply)
-    })
+    setPlan(nextPlan)
+    setSavedPlans(nextSavedPlans)
     setSelectedLessonId(firstLesson?.id || null)
     setActiveVideoLessonId(firstLesson?.id || null)
-    clearVideoStateForPlan(planToApply)
+    clearVideoStateForPlan(nextPlan)
+    setVideoError('')
     setActiveScheduleWeek(firstLesson?.week || 1)
-    setScheduleEvents(buildInitialSchedule(planToApply.lessons, planToApply.profile.learningTimePreference))
+    setScheduleEvents(buildParallelSchedule(nextSavedPlans))
     setActiveChatTopicId(nextTopic.id)
     setActiveChatLessonId(firstLesson?.id || null)
     setChatTopics((current) => upsertChatTopic(current, nextTopic))
+    setExpandedScheduleTopicIds((current) => ({ ...current, [nextPlanId]: true }))
+    setExpandedChatTopicIds((current) => ({ ...current, [nextTopic.id]: true }))
+    setProfile(blankProfile)
+    setIsTopicInputFocused(false)
     if (firstLesson) ensureLessonChat(firstLesson)
-    setDuplicatePlanDraft(null)
     setView('plan')
-    void suggestAndAnalyzeAllVideos(planToApply)
-  }
-
-  function cancelDuplicatePlanDraft() {
-    setDuplicatePlanDraft(null)
+    setIsGenerating(false)
+    void suggestAndAnalyzeAllVideos(nextPlan)
   }
 
   function selectLesson(lessonId: string) {
@@ -348,6 +353,12 @@ export default function Home() {
         lessons: current.lessons.map((lesson) => (lesson.id === lessonId ? { ...lesson, status } : lesson))
       }
     })
+    setSavedPlans((current) =>
+      current.map((savedPlan) => ({
+        ...savedPlan,
+        lessons: savedPlan.lessons.map((lesson) => (lesson.id === lessonId ? { ...lesson, status } : lesson))
+      }))
+    )
   }
 
   function ensureLessonChat(lesson: Lesson) {
@@ -358,6 +369,7 @@ export default function Home() {
   }
 
   function openChatForLesson(lesson: Lesson) {
+    if (isQuizInProgress) return
     if (plan) {
       const topic = buildChatTopic(plan)
       setChatTopics((current) => upsertChatTopic(current, topic))
@@ -377,44 +389,23 @@ export default function Home() {
   }
 
   async function sendTutorQuestion(rawQuestion: string) {
-    if (!selectedChatTopic || !selectedChatLesson) return
-    await sendTutorQuestionForLesson(rawQuestion, selectedChatTopic, selectedChatLesson, () => setQuestion(''))
-  }
-
-  async function sendVideoTutorQuestion(rawQuestion: string) {
-    if (!plan || !activeVideoLesson) return
-    const topic = buildChatTopic(plan)
-    setChatTopics((current) => upsertChatTopic(current, topic))
-    setActiveChatTopicId(topic.id)
-    setActiveChatLessonId(activeVideoLesson.id)
-    ensureLessonChat(activeVideoLesson)
-    await sendTutorQuestionForLesson(rawQuestion, topic, activeVideoLesson, () => setVideoQuestion(''))
-  }
-
-  async function sendTutorQuestionForLesson(rawQuestion: string, topic: ChatTopic, lesson: Lesson, clearInput: () => void) {
     const trimmed = rawQuestion.trim()
-    if (!trimmed) return
+    if (!trimmed || !selectedChatTopic || !selectedChatLesson || isQuizInProgress) return
 
-    const lessonId = lesson.id
-    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(lesson)]
-    const videoReferences = buildTutorVideoReferences(trimmed, lesson, topic, videoAnalysisByLesson)
+    const lessonId = selectedChatLesson.id
+    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(selectedChatLesson)]
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
     const nextMessages = [...currentMessages, userMessage]
     setChatHistoryByLesson((current) => ({ ...current, [lessonId]: nextMessages }))
-    clearInput()
+    setQuestion('')
     setIsAsking(true)
 
     try {
+      const videoReferences = buildTutorVideoReferences(trimmed, selectedChatLesson, selectedChatTopic, videoAnalysisByLesson)
       const response = await fetch('/api/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: trimmed,
-          plan: plan || topicToPlan(topic),
-          lesson,
-          history: currentMessages.slice(-6),
-          videoReferences
-        })
+        body: JSON.stringify({ question: trimmed, plan: plan || topicToPlan(selectedChatTopic), lesson: selectedChatLesson, history: currentMessages.slice(-6), videoReferences })
       })
       const payload = await response.json()
       setChatHistoryByLesson((current) => ({
@@ -441,7 +432,37 @@ export default function Home() {
 
   async function askVideoTutor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    await sendVideoTutorQuestion(videoQuestion)
+    const trimmed = videoQuestion.trim()
+    if (!trimmed || !plan || !activeVideoLesson || isQuizInProgress) return
+
+    const topic = buildChatTopic(plan)
+    setChatTopics((current) => upsertChatTopic(current, topic))
+    setActiveChatTopicId(topic.id)
+    setActiveChatLessonId(activeVideoLesson.id)
+
+    const lessonId = activeVideoLesson.id
+    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(activeVideoLesson)]
+    const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
+    const nextMessages = [...currentMessages, userMessage]
+    setChatHistoryByLesson((current) => ({ ...current, [lessonId]: nextMessages }))
+    setVideoQuestion('')
+    setIsAsking(true)
+
+    try {
+      const videoReferences = buildTutorVideoReferences(trimmed, activeVideoLesson, topic, videoAnalysisByLesson)
+      const response = await fetch('/api/tutor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: trimmed, plan, lesson: activeVideoLesson, history: currentMessages.slice(-6), videoReferences })
+      })
+      const payload = await response.json()
+      setChatHistoryByLesson((current) => ({
+        ...current,
+        [lessonId]: [...nextMessages, { id: crypto.randomUUID(), role: 'assistant', content: payload.answer }]
+      }))
+    } finally {
+      setIsAsking(false)
+    }
   }
 
   async function analyzeVideo(event: FormEvent<HTMLFormElement>) {
@@ -449,22 +470,12 @@ export default function Home() {
     await analyzeVideoUrl(youtubeUrl)
   }
 
-  function excludedVideoUrlsForLesson(lessonId: string) {
-    return Object.entries(youtubeUrlByLesson)
-      .filter(([currentLessonId, url]) => currentLessonId !== lessonId && Boolean(url.trim()))
-      .map(([, url]) => normalizeVideoUrlForComparison(url))
-  }
-
-  function playVideoAt(lessonId: string, startSeconds: number) {
-    setVideoStartByLesson((current) => ({ ...current, [lessonId]: Math.max(0, Math.floor(startSeconds)) }))
-  }
-
   async function analyzeVideoUrl(url: string, sourcePlan = plan, sourceLesson = activeVideoLesson) {
     const lesson = sourceLesson || sourcePlan?.lessons.find((item) => item.id === activeVideoLessonId) || sourcePlan?.lessons[0] || null
     if (!url.trim() || !sourcePlan || !lesson) return
 
-    setLessonFlag(setAnalyzingVideoByLesson, lesson.id, true)
-    setLessonMessage(setVideoErrorByLesson, lesson.id, '')
+    setIsAnalyzingVideo(true)
+    setVideoError('')
 
     const response = await fetch('/api/videos/analyze', {
       method: 'POST',
@@ -475,69 +486,78 @@ export default function Home() {
 
     if (!response.ok) {
       setVideoAnalysisByLesson((current) => omitRecordKey(current, lesson.id))
-      setLessonMessage(setVideoErrorByLesson, lesson.id, payload.error || 'Không phân tích được video.')
+      setVideoError(formatVideoUiError(payload.error || 'Không phân tích được video.'))
     } else {
       setVideoAnalysisByLesson((current) => ({ ...current, [lesson.id]: payload.analysis as VideoAnalysis }))
-      setLessonMessage(setVideoErrorByLesson, lesson.id, '')
+      setVideoError('')
     }
 
-    setLessonFlag(setAnalyzingVideoByLesson, lesson.id, false)
+    setIsAnalyzingVideo(false)
   }
 
-  async function suggestAndAnalyzeVideo(sourcePlan = plan, sourceLesson = activeVideoLesson, force = false, excludedUrls: string[] = []) {
-    if (!sourcePlan) return null
-    if (!sourceLesson) return null
+  async function suggestAndAnalyzeVideo(sourcePlan = plan, sourceLesson = activeVideoLesson, force = false) {
+    if (!sourcePlan) return
+    if (!sourceLesson) return
 
     const autoSuggestKey = videoJobKey(sourcePlan, sourceLesson)
-    if (!force && (videoAnalysisByLesson[sourceLesson.id] || autoSuggestedVideoKeysRef.current.has(autoSuggestKey))) return null
+    if (!force && (videoAnalysisByLesson[sourceLesson.id] || autoSuggestedVideoKeysRef.current.has(autoSuggestKey))) return
     autoSuggestedVideoKeysRef.current.add(autoSuggestKey)
 
-    setLessonFlag(setSuggestingVideoByLesson, sourceLesson.id, true)
-    setLessonMessage(setVideoErrorByLesson, sourceLesson.id, '')
+    setIsSuggestingVideo(true)
+    setVideoError('')
 
     const response = await fetch('/api/videos/suggest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan: sourcePlan, lesson: sourceLesson, excludedUrls })
+      body: JSON.stringify({
+        plan: sourcePlan,
+        lesson: sourceLesson,
+        excludedUrls: Object.entries(youtubeUrlByLesson)
+          .filter(([lessonId, url]) => lessonId !== sourceLesson.id && url.trim())
+          .map(([, url]) => url)
+      })
     })
     const payload = await response.json()
 
     if (!response.ok) {
       setVideoRecommendationByLesson((current) => omitRecordKey(current, sourceLesson.id))
-      setLessonMessage(setVideoErrorByLesson, sourceLesson.id, payload.error || 'Không gợi ý được video.')
-      setLessonFlag(setSuggestingVideoByLesson, sourceLesson.id, false)
-      return null
+      setVideoError(formatVideoUiError(payload.error || 'Không gợi ý được video.'))
+      setIsSuggestingVideo(false)
+      return
     }
 
     const recommendation = payload.recommendation as VideoRecommendation
     setVideoRecommendationByLesson((current) => ({ ...current, [sourceLesson.id]: recommendation }))
     setYoutubeUrlByLesson((current) => ({ ...current, [sourceLesson.id]: recommendation.url }))
-    setLessonFlag(setSuggestingVideoByLesson, sourceLesson.id, false)
+    setIsSuggestingVideo(false)
     await analyzeVideoUrl(recommendation.url, sourcePlan, sourceLesson)
-    return recommendation
+  }
+
+  function playVideoAt(lessonId: string, startSeconds: number) {
+    setVideoPlayerStartByLesson((current) => ({ ...current, [lessonId]: Math.max(0, Math.floor(startSeconds)) }))
   }
 
   async function suggestAndAnalyzeAllVideos(sourcePlan = plan) {
     if (!sourcePlan || isProcessingVideoBatch) return
 
     setIsProcessingVideoBatch(true)
+    setVideoError('')
 
-    const usedUrls = new Set(
-      sourcePlan.lessons
-        .map((lesson) => videoRecommendationByLesson[lesson.id]?.url || youtubeUrlByLesson[lesson.id])
-        .filter((url): url is string => Boolean(url?.trim()))
-        .map(normalizeVideoUrlForComparison)
-    )
+    const sharedHandled = await suggestAndAnalyzeSharedVideo(sourcePlan)
+    if (sharedHandled) {
+      setVideoBatchStatus('')
+      setIsProcessingVideoBatch(false)
+      return
+    }
+
     for (const lesson of sourcePlan.lessons) {
       const key = videoJobKey(sourcePlan, lesson)
       if (videoAnalysisByLesson[lesson.id] || autoSuggestedVideoKeysRef.current.has(key)) continue
-      setLessonMessage(setVideoStatusByLesson, lesson.id, `Đang gợi ý video tuần ${lesson.week}/${sourcePlan.lessons.length}`)
-      const excludedUrls = Array.from(usedUrls)
-      const recommendation = await suggestAndAnalyzeVideo(sourcePlan, lesson, false, excludedUrls)
-      setLessonMessage(setVideoStatusByLesson, lesson.id, '')
-      if (recommendation?.url) usedUrls.add(normalizeVideoUrlForComparison(recommendation.url))
+      setVideoBatchStatus(`Đang gợi ý video tuần ${lesson.week}/${sourcePlan.lessons.length}`)
+      await suggestAndAnalyzeVideo(sourcePlan, lesson)
     }
 
+    setVideoBatchStatus('')
     setIsProcessingVideoBatch(false)
   }
 
@@ -547,7 +567,7 @@ export default function Home() {
     if (allLessonsAlreadyHaveVideo || autoSuggestedVideoKeysRef.current.has(sharedKey)) return false
 
     autoSuggestedVideoKeysRef.current.add(sharedKey)
-    setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, 'Đang tìm video tổng hợp cho toàn bộ lộ trình')
+    setVideoBatchStatus('Đang tìm video tổng hợp cho toàn bộ lộ trình')
 
     const suggestResponse = await fetch('/api/videos/suggest-shared', {
       method: 'POST',
@@ -558,7 +578,7 @@ export default function Home() {
     const recommendation = suggestResponse.ok ? (suggestPayload.recommendation as VideoRecommendation | null) : null
     if (!recommendation?.url) return false
 
-    setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, 'Đang phân tích video tổng hợp')
+    setVideoBatchStatus('Đang phân tích video tổng hợp')
     const analyzeResponse = await fetch('/api/videos/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -567,8 +587,7 @@ export default function Home() {
     const analyzePayload = await analyzeResponse.json()
 
     if (!analyzeResponse.ok) {
-      setLessonMessages(setVideoErrorByLesson, sourcePlan.lessons, analyzePayload.error || 'Không phân tích được video tổng hợp.')
-      setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, '')
+      setVideoError(formatVideoUiError(analyzePayload.error || 'Không phân tích được video tổng hợp.'))
       return false
     }
 
@@ -587,38 +606,102 @@ export default function Home() {
     setVideoAnalysisByLesson((current) => ({ ...current, ...nextAnalysis }))
     setVideoRecommendationByLesson((current) => ({ ...current, ...nextRecommendation }))
     setYoutubeUrlByLesson((current) => ({ ...current, ...nextUrls }))
-    setLessonMessages(setVideoErrorByLesson, sourcePlan.lessons, '')
-    setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, '')
+    setVideoError('')
     return true
   }
 
-  function addLessonToSchedule(lesson: Lesson, kind: ScheduleEvent['kind'] = 'study') {
-    const start = preferredScheduleStart[plan?.profile.learningTimePreference || profile.learningTimePreference]
-    const duration = kind === 'study' ? Math.min(120, lesson.durationMinutes) : kind === 'practice' ? 60 : 30
-    const day = kind === 'study' ? 'Thứ 2' : kind === 'practice' ? 'Thứ 4' : 'Thứ 6'
-    const title = kind === 'study' ? lesson.title : kind === 'practice' ? `Thực hành: ${lesson.title}` : `Ôn + quiz: ${lesson.title}`
+  async function generateLessonQuiz() {
+    if (!plan || !activeVideoLesson) return
 
+    setIsGeneratingQuiz(true)
+    setVideoError('')
+
+    const response = await fetch('/api/quiz', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, lesson: activeVideoLesson, matches: activeQuizVideoMatches })
+    })
+    const payload = await response.json()
+
+    if (!response.ok) {
+      setVideoError(payload.error || 'Không tạo được quiz.')
+    } else {
+      const quiz = payload.quiz as LessonQuiz
+      setQuizByLesson((current) => ({ ...current, [activeVideoLesson.id]: quiz }))
+      setQuizAnswersByLesson((current) => ({ ...current, [activeVideoLesson.id]: {} }))
+      setQuizSubmittedByLesson((current) => ({ ...current, [activeVideoLesson.id]: false }))
+      setActiveQuizSessionLessonId(null)
+      setVideoError('')
+    }
+
+    setIsGeneratingQuiz(false)
+  }
+
+  function startActiveQuiz() {
+    if (!activeVideoLesson || !activeQuiz) return
+    setQuizAnswersByLesson((current) => ({ ...current, [activeVideoLesson.id]: {} }))
+    setQuizSubmittedByLesson((current) => ({ ...current, [activeVideoLesson.id]: false }))
+    setActiveQuizSessionLessonId(activeVideoLesson.id)
+  }
+
+  function completeActiveQuiz() {
+    if (!activeVideoLesson || !activeQuiz || !canCompleteActiveQuiz) return
+    setQuizSubmittedByLesson((current) => ({ ...current, [activeVideoLesson.id]: true }))
+    setActiveQuizSessionLessonId(null)
+    updateLessonStatus(activeVideoLesson.id, 'done')
+  }
+
+  function chooseQuizAnswer(questionId: string, optionIndex: number) {
+    if (!activeVideoLesson || !activeQuiz || !isActiveQuizStarted || isActiveQuizSubmitted) return
+    if (typeof activeQuizAnswers[questionId] === 'number') return
+    const nextLessonAnswers = {
+      ...activeQuizAnswers,
+      [questionId]: optionIndex
+    }
+
+    setQuizAnswersByLesson((current) => ({
+      ...current,
+      [activeVideoLesson.id]: nextLessonAnswers
+    }))
+  }
+
+  function addLessonToSchedule(lesson: Lesson, sourcePlan?: LearningPlan) {
+    const ownerPlan = sourcePlan || plan || schedulePlans[0]
+    const start = preferredScheduleStart[ownerPlan?.profile.learningTimePreference || profile.learningTimePreference]
     setScheduleEvents((current) => [
       ...current,
       {
         id: crypto.randomUUID(),
+        planId: ownerPlan ? planStorageId(ownerPlan) : undefined,
+        planTitle: ownerPlan?.profile.topic,
         lessonId: lesson.id,
         week: lesson.week,
-        title,
-        day,
+        title: ownerPlan ? `${ownerPlan.profile.topic}: ${lesson.title}` : lesson.title,
+        day: 'Thứ 2',
         start,
-        end: addMinutesToTime(start, duration),
-        kind
+        end: addMinutesToTime(start, Math.min(120, lesson.durationMinutes)),
+        kind: 'study'
       }
     ])
     setActiveScheduleWeek(lesson.week)
+  }
+
+  function toggleScheduleTopic(topicId: string) {
+    setExpandedScheduleTopicIds((current) => ({ ...current, [topicId]: !current[topicId] }))
+  }
+
+  function toggleChatTopic(topic: ChatTopic) {
+    setActiveChatTopicId(topic.id)
+    setExpandedChatTopicIds((current) => ({ ...current, [topic.id]: !current[topic.id] }))
   }
 
   function moveScheduleEvent(eventId: string, day: string, start: string) {
     setScheduleEvents((current) =>
       current.map((event) => {
         if (event.id !== eventId) return event
-        const lesson = plan?.lessons.find((item) => item.id === event.lessonId)
+        if (event.week > activeScheduleWeek) return event
+        const sourcePlan = schedulePlans.find((item) => planStorageId(item) === event.planId)
+        const lesson = sourcePlan?.lessons.find((item) => item.id === event.lessonId)
         const duration = event.kind === 'study' ? Math.min(120, lesson?.durationMinutes || 60) : event.kind === 'practice' ? 60 : 30
         return { ...event, week: activeScheduleWeek, day, start, end: addMinutesToTime(start, duration) }
       })
@@ -633,21 +716,26 @@ export default function Home() {
     event.preventDefault()
     const eventId = event.dataTransfer.getData('schedule-event-id')
     const lessonId = event.dataTransfer.getData('lesson-id')
+    const planId = event.dataTransfer.getData('plan-id')
 
     if (eventId) {
       moveScheduleEvent(eventId, day, start)
       return
     }
 
-    const lesson = plan?.lessons.find((item) => item.id === lessonId)
-    if (!lesson) return
+    const sourcePlan = schedulePlans.find((item) => planStorageId(item) === planId) || plan || schedulePlans[0]
+    const lesson = sourcePlan?.lessons.find((item) => item.id === lessonId)
+    if (!lesson || !sourcePlan) return
+    if (lesson.week > activeScheduleWeek) return
     setScheduleEvents((current) => [
       ...current,
       {
         id: crypto.randomUUID(),
+        planId: planStorageId(sourcePlan),
+        planTitle: sourcePlan.profile.topic,
         lessonId: lesson.id,
         week: activeScheduleWeek,
-        title: lesson.title,
+        title: `${sourcePlan.profile.topic}: ${lesson.title}`,
         day,
         start,
         end: addMinutesToTime(start, Math.min(120, lesson.durationMinutes)),
@@ -658,6 +746,7 @@ export default function Home() {
 
   function applySavedTopic(topic: ChatTopic) {
     setProfile(topic.profile)
+    setIsTopicInputFocused(false)
     setActiveChatTopicId(topic.id)
     setActiveChatLessonId(topic.lessons[0]?.id || null)
   }
@@ -667,16 +756,26 @@ export default function Home() {
     setYoutubeUrlByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setVideoAnalysisByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setVideoRecommendationByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setVideoStartByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setVideoErrorByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setVideoStatusByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setAnalyzingVideoByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setSuggestingVideoByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setQuizByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setQuizAnswersByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setQuizSubmittedByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setActiveQuizSessionLessonId(null)
   }
 
   function deleteSavedPlan(savedPlan: LearningPlan) {
     const savedPlanId = planStorageId(savedPlan)
-    setSavedPlans((current) => current.filter((item) => planStorageId(item) !== savedPlanId))
+    const deletedLessonIds = new Set(savedPlan.lessons.map((lesson) => lesson.id))
+    const deletedTopicId = buildChatTopic(savedPlan).id
+    const nextSavedPlans = savedPlans.filter((item) => planStorageId(item) !== savedPlanId)
+    setSavedPlans(nextSavedPlans)
+    setScheduleEvents(buildParallelSchedule(nextSavedPlans))
+    setChatTopics((current) => current.filter((topic) => topic.id !== deletedTopicId))
+    setChatHistoryByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
+    setExpandedChatTopicIds((current) => omitRecordKey(current, deletedTopicId))
+    if (activeChatTopicId === deletedTopicId) {
+      setActiveChatTopicId(null)
+      setActiveChatLessonId(null)
+    }
 
     if (!plan || planStorageId(plan) !== savedPlanId) return
     clearVideoStateForPlan(plan)
@@ -691,17 +790,24 @@ export default function Home() {
     const restoredPlan = normalizeLoadedPlan(savedPlan)
     const firstLesson = restoredPlan.lessons[0] || null
     const topic = buildChatTopic(restoredPlan)
+    const nextSavedPlans = upsertSavedPlan(savedPlans, restoredPlan)
+    const restoredPlanId = planStorageId(restoredPlan)
 
-    setProfile(restoredPlan.profile)
+    setProfile(blankProfile)
+    setIsTopicInputFocused(false)
     setPlan(restoredPlan)
+    setSavedPlans(nextSavedPlans)
     setSelectedLessonId(firstLesson?.id || null)
     setActiveVideoLessonId(firstLesson?.id || null)
     clearVideoStateForPlan(restoredPlan)
+    setVideoError('')
     setActiveScheduleWeek(firstLesson?.week || 1)
-    setScheduleEvents(buildInitialSchedule(restoredPlan.lessons, restoredPlan.profile.learningTimePreference))
+    setScheduleEvents(buildParallelSchedule(nextSavedPlans))
     setChatTopics((current) => upsertChatTopic(current, topic))
     setActiveChatTopicId(topic.id)
     setActiveChatLessonId(firstLesson?.id || null)
+    setExpandedScheduleTopicIds((current) => ({ ...current, [restoredPlanId]: true }))
+    setExpandedChatTopicIds((current) => ({ ...current, [topic.id]: true }))
     if (firstLesson) ensureLessonChat(firstLesson)
     void suggestAndAnalyzeAllVideos(restoredPlan)
   }
@@ -715,16 +821,19 @@ export default function Home() {
         </div>
         <div className="top-actions">
           <div className="view-switch">
-            <button className={view === 'plan' ? 'active' : ''} type="button" onClick={() => setView('plan')}>
+            <button className={view === 'plan' ? 'active' : ''} type="button" disabled={isQuizInProgress} onClick={() => setView('plan')}>
               Lộ trình
             </button>
-            <button className={view === 'schedule' ? 'active' : ''} type="button" onClick={() => setView('schedule')}>
+            <button className={view === 'schedule' ? 'active' : ''} type="button" disabled={isQuizInProgress} onClick={() => setView('schedule')}>
               Lịch học
             </button>
-            <button className={view === 'videos' ? 'active' : ''} type="button" onClick={() => setView('videos')}>
+            <button className={view === 'videos' ? 'active' : ''} type="button" disabled={isQuizInProgress} onClick={() => setView('videos')}>
               Video
             </button>
-            <button className={view === 'chat' ? 'active' : ''} type="button" onClick={() => setView('chat')}>
+            <button className={view === 'quiz' ? 'active' : ''} type="button" onClick={() => setView('quiz')}>
+              Quiz
+            </button>
+            <button className={view === 'chat' ? 'active' : ''} type="button" disabled={isQuizInProgress} onClick={() => setView('chat')}>
               Hỏi đáp
             </button>
           </div>
@@ -742,11 +851,16 @@ export default function Home() {
             <label>
               Chủ đề
               <div className="topic-combobox">
-                <input value={profile.topic} onChange={(event) => setProfile({ ...profile, topic: event.target.value })} />
+                <input
+                  value={profile.topic}
+                  onBlur={() => setIsTopicInputFocused(false)}
+                  onChange={(event) => setProfile({ ...profile, topic: event.target.value })}
+                  onFocus={() => setIsTopicInputFocused(true)}
+                />
                 {savedTopicOptions.length > 0 && (
                   <div className="topic-suggestions">
                     {savedTopicOptions.map((topic) => (
-                      <button key={topic.id} type="button" onClick={() => applySavedTopic(topic)}>
+                      <button key={topic.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => applySavedTopic(topic)}>
                         <strong>{topic.topic}</strong>
                         <span>{topic.goal}</span>
                       </button>
@@ -796,7 +910,7 @@ export default function Home() {
                 <input
                   type="number"
                   min={1}
-                  max={30}
+                  max={100}
                   value={profile.hoursPerWeek}
                   onChange={(event) => setProfile({ ...profile, hoursPerWeek: Number(event.target.value) })}
                 />
@@ -838,24 +952,6 @@ export default function Home() {
               {isGenerating ? <Loader2 className="spin" size={18} /> : <CalendarDays size={18} />}
               Tạo lộ trình học
             </button>
-
-            {duplicatePlanDraft && (
-              <div className="duplicate-plan-warning" role="alert">
-                <strong>Đã có lộ trình tên "{duplicatePlanDraft.profile.topic}"</strong>
-                <p>Bạn muốn giữ cả hai bản, thay thế bản đã lưu, hay quay lại chỉnh thông tin?</p>
-                <div>
-                  <button type="button" onClick={() => applyGeneratedPlan(duplicatePlanDraft, 'keep-both')}>
-                    Giữ lại cả 2
-                  </button>
-                  <button type="button" onClick={() => applyGeneratedPlan(duplicatePlanDraft, 'replace')}>
-                    Thay thế
-                  </button>
-                  <button type="button" onClick={cancelDuplicatePlanDraft}>
-                    Quay lại
-                  </button>
-                </div>
-              </div>
-            )}
 
             {savedPlans.length > 0 && (
               <div className="saved-plan-list">
@@ -951,30 +1047,27 @@ export default function Home() {
                     <option value="review">Cần ôn</option>
                   </select>
                 </div>
-
-                <div className="study-flow">
-                  <section className="study-flow-card">
-                    <div>
-                      <strong>Mục tiêu/checkpoint</strong>
-                      <button type="button" onClick={() => addLessonToSchedule(selectedLesson, 'study')}>
-                        <CalendarDays size={14} />
-                        Lịch học
-                      </button>
-                    </div>
-                    <p>{selectedLesson.checkpoint}</p>
-                  </section>
-
+                <p>{selectedLesson.checkpoint}</p>
+                <ul>
+                  {selectedLesson.activities.map((activity) => (
+                    <li key={activity}>{activity}</li>
+                  ))}
+                </ul>
+                <div className="quiz-list">
+                  <strong>Quiz nhanh</strong>
+                  {selectedLesson.quiz.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
                 </div>
-
                 <div className="learning-assets">
                   <AssetList icon={<FileQuestion size={15} />} title="Bài tập về nhà" items={selectedLesson.homework} />
-                  <AssetList icon={<Link size={15} />} title="Tài liệu học tập" items={selectedLesson.resources} />
+                  <AssetList icon={<Link size={15} />} title="Tài liệu học tập" items={selectedLesson.recommendedResources?.length ? selectedLesson.recommendedResources : selectedLesson.resources} />
                 </div>
                 <button className="complete-button" type="button" onClick={() => updateLessonStatus(selectedLesson.id, 'done')}>
                   <CheckCircle2 size={16} />
                   Đánh dấu hoàn thành
                 </button>
-                <button className="secondary-button" type="button" onClick={() => openChatForLesson(selectedLesson)}>
+                <button className="secondary-button" type="button" disabled={isQuizInProgress} onClick={() => openChatForLesson(selectedLesson)}>
                   <MessageSquareText size={16} />
                   Chuyển sang hỏi đáp
                 </button>
@@ -991,33 +1084,52 @@ export default function Home() {
               <CalendarDays size={18} />
               <h2>Bài học có thể xếp lịch</h2>
             </div>
-            {plan && (
+            {scheduleWeeks.length > 0 && (
               <div className="week-picker compact">
-                {plan.lessons.map((lesson) => (
-                  <button className={activeScheduleWeek === lesson.week ? 'active' : ''} key={lesson.id} type="button" onClick={() => setActiveScheduleWeek(lesson.week)}>
-                    Tuần {lesson.week}
+                {scheduleWeeks.map((week) => (
+                  <button className={activeScheduleWeek === week ? 'active' : ''} key={week} type="button" onClick={() => setActiveScheduleWeek(week)}>
+                    Tuần {week}
                   </button>
                 ))}
               </div>
             )}
-            {plan ? (
-              plan.lessons.map((lesson) => (
-                <div
-                  className={`draggable-lesson ${activeScheduleWeek === lesson.week ? 'active' : ''}`}
-                  draggable
-                  key={lesson.id}
-                  onDragStart={(event) => event.dataTransfer.setData('lesson-id', lesson.id)}
-                >
-                  <GripVertical size={16} />
-                  <div>
-                    <strong>Tuần {lesson.week}: {lesson.title}</strong>
-                    <span>{lesson.durationMinutes} phút · {pacingLabel(lesson.pacing)}</span>
+            {schedulePlans.length > 0 ? (
+              schedulePlans.map((sourcePlan) => {
+                const sourcePlanId = planStorageId(sourcePlan)
+                const isExpanded = Boolean(expandedScheduleTopicIds[sourcePlanId])
+                return (
+                  <div className="schedule-topic-group" key={sourcePlanId}>
+                    <button className={`schedule-topic-button ${isExpanded ? 'active' : ''}`} type="button" onClick={() => toggleScheduleTopic(sourcePlanId)}>
+                      <strong>{sourcePlan.profile.topic}</strong>
+                      <span>{sourcePlan.lessons.length} bài học · {sourcePlan.profile.hoursPerWeek} giờ/tuần</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="schedule-lesson-list">
+                        {sourcePlan.lessons.map((lesson) => (
+                          <div
+                            className={`draggable-lesson ${activeScheduleWeek === lesson.week ? 'active' : ''}`}
+                            draggable
+                            key={`${sourcePlanId}-${lesson.id}`}
+                            onDragStart={(event) => {
+                              event.dataTransfer.setData('lesson-id', lesson.id)
+                              event.dataTransfer.setData('plan-id', sourcePlanId)
+                            }}
+                          >
+                            <GripVertical size={16} />
+                            <div>
+                              <strong>Tuần {lesson.week}: {lesson.title}</strong>
+                              <span>{lesson.durationMinutes} phút · {pacingLabel(lesson.pacing)}</span>
+                            </div>
+                            <button type="button" onClick={() => addLessonToSchedule(lesson, sourcePlan)}>
+                              <CalendarDays size={15} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <button type="button" onClick={() => addLessonToSchedule(lesson)}>
-                    <CalendarDays size={15} />
-                  </button>
-                </div>
-              ))
+                )
+              })
             ) : (
               <div className="empty-state compact">Tạo lộ trình trước để tự sinh lịch học.</div>
             )}
@@ -1028,22 +1140,22 @@ export default function Home() {
               <div>
                 <p className="eyebrow">Kéo thả lịch học</p>
                 <h2>Lịch học tuần {activeScheduleWeek}</h2>
-                <p>{plan?.lessons.find((lesson) => lesson.week === activeScheduleWeek)?.title || 'Chọn tuần để xem nội dung học tương ứng.'}</p>
+                <p>{scheduleLessons.filter((item) => item.lesson.week === activeScheduleWeek).map((item) => item.plan.profile.topic).join(' + ') || 'Chọn tuần để xem nội dung học tương ứng.'}</p>
               </div>
               <button
                 className="secondary-button"
                 type="button"
-                disabled={!plan}
-                onClick={() => plan && setScheduleEvents(buildInitialSchedule(plan.lessons, plan.profile.learningTimePreference))}
+                disabled={schedulePlans.length === 0}
+                onClick={() => setScheduleEvents(buildParallelSchedule(schedulePlans))}
               >
                 Tự xếp lại
               </button>
             </div>
-            {plan && (
+            {scheduleWeeks.length > 0 && (
               <div className="week-tabs">
-                {plan.lessons.map((lesson) => (
-                  <button className={activeScheduleWeek === lesson.week ? 'active' : ''} key={lesson.id} type="button" onClick={() => setActiveScheduleWeek(lesson.week)}>
-                    Tuần {lesson.week}
+                {scheduleWeeks.map((week) => (
+                  <button className={activeScheduleWeek === week ? 'active' : ''} key={week} type="button" onClick={() => setActiveScheduleWeek(week)}>
+                    Tuần {week}
                   </button>
                 ))}
               </div>
@@ -1115,91 +1227,38 @@ export default function Home() {
                     <h2>{activeVideoLesson.title}</h2>
                     <p>{activeVideoLesson.objective}</p>
                   </div>
-                  <button className="secondary-button" type="button" onClick={() => openChatForLesson(activeVideoLesson)}>
+                  <button className="secondary-button" type="button" disabled={isQuizInProgress} onClick={() => openChatForLesson(activeVideoLesson)}>
                     Hỏi tutor
                   </button>
                 </div>
 
+                <div className="video-study-grid">
+                  <div className="video-study-content">
                 <form className="video-url-form" onSubmit={analyzeVideo}>
                   <input
                     value={youtubeUrl}
                     onChange={(event) => activeVideoLesson && setYoutubeUrlByLesson((current) => ({ ...current, [activeVideoLesson.id]: event.target.value }))}
                     placeholder="YouTube URL sẽ được LLM gợi ý, hoặc bạn có thể dán tay..."
                   />
-                  <button className="primary-button" type="submit" disabled={!plan || !youtubeUrl.trim() || isAnalyzingActiveVideo}>
-                    {isAnalyzingActiveVideo ? <Loader2 className="spin" size={18} /> : <PlaySquare size={18} />}
+                  <button className="primary-button" type="submit" disabled={!plan || !youtubeUrl.trim() || isAnalyzingVideo}>
+                    {isAnalyzingVideo ? <Loader2 className="spin" size={18} /> : <PlaySquare size={18} />}
                     Phân tích
                   </button>
                 </form>
 
-                <button
-                  className="secondary-button video-suggest-button"
-                  type="button"
-                  disabled={!plan || !activeVideoLesson || isSuggestingActiveVideo || isAnalyzingActiveVideo}
-                  onClick={() => activeVideoLesson && suggestAndAnalyzeVideo(plan, activeVideoLesson, true, excludedVideoUrlsForLesson(activeVideoLesson.id))}
-                >
-                  {isSuggestingActiveVideo ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+                <button className="secondary-button video-suggest-button" type="button" disabled={!plan || isSuggestingVideo || isAnalyzingVideo} onClick={() => suggestAndAnalyzeVideo()}>
+                  {isSuggestingVideo ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
                   Gợi ý video bằng LLM và phân tích
                 </button>
 
-                {activeVideoStatus && (
+                {isProcessingVideoBatch && (
                   <div className="video-processing">
                     <Loader2 className="spin" size={16} />
-                    {activeVideoStatus}
+                    {videoBatchStatus || 'Đang gợi ý video cho các tuần...'}
                   </div>
                 )}
 
-                {activeVideoError && <div className="video-error">{activeVideoError}</div>}
-
-                <div className="video-study-grid">
-                  {activeVideoEmbedUrl ? (
-                    <div className="embedded-video">
-                      <iframe
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                        allowFullScreen
-                        key={activeVideoEmbedUrl}
-                        src={activeVideoEmbedUrl}
-                        title={videoAnalysis?.video.title || videoRecommendation?.title || activeVideoLesson.title}
-                      />
-                    </div>
-                  ) : (
-                    <div className="empty-state compact">Dán URL hoặc dùng LLM gợi ý để phát video trong trang.</div>
-                  )}
-
-                  <div className="video-tutor-panel">
-                    <div className="chat-history-heading">
-                      <div>
-                        <h3>AI tutor</h3>
-                        <p>{activeVideoLesson.title}</p>
-                      </div>
-                      <span>{videoChatMessageCount} tin nhắn</span>
-                    </div>
-                    <div className="chat-log video-chat-log" ref={videoChatLogRef}>
-                      {videoMessages.length === 0 ? (
-                        <div className="empty-state compact">Hỏi tutor trong lúc xem video.</div>
-                      ) : (
-                        videoMessages.map((message) => (
-                          <div key={message.id} className={`message ${message.role}`}>
-                            {message.role === 'assistant' ? <AssistantMessage content={message.content} /> : message.content}
-                          </div>
-                        ))
-                      )}
-                      {isAsking && activeChatLessonId === activeVideoLesson.id && (
-                        <div className="message assistant pending">
-                          <Loader2 className="spin" size={16} />
-                          Đang trả lời...
-                        </div>
-                      )}
-                      <div className="chat-scroll-anchor" ref={videoChatEndRef} />
-                    </div>
-                    <form className="chat-form video-chat-form" onSubmit={askVideoTutor}>
-                      <input value={videoQuestion} onChange={(event) => setVideoQuestion(event.target.value)} placeholder="Hỏi về đoạn video hoặc bài học này..." />
-                      <button type="submit" disabled={!activeVideoLesson || isAsking}>
-                        <CheckCircle2 size={18} />
-                      </button>
-                    </form>
-                  </div>
-                </div>
+                {videoError && <div className="video-error">{videoError}</div>}
 
                 {videoRecommendation && (
                   <div className="video-recommendation">
@@ -1209,6 +1268,10 @@ export default function Home() {
                     </div>
                     <p>{videoRecommendation.title}</p>
                     <small>{videoRecommendation.reason}</small>
+                    <a className="video-open-link" href={videoRecommendation.url} target="_blank" rel="noreferrer">
+                      <Link size={15} />
+                      Mở video trên YouTube
+                    </a>
                   </div>
                 )}
 
@@ -1221,6 +1284,18 @@ export default function Home() {
                       <small>{videoAnalysis.video.durationMinutes} phút</small>
                     </div>
 
+                    {activeYoutubeEmbedUrl ? (
+                      <div className="video-embed">
+                        <iframe
+                          key={activeYoutubeEmbedUrl}
+                          src={activeYoutubeEmbedUrl}
+                          title={videoAnalysis.video.title}
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                          allowFullScreen
+                        />
+                      </div>
+                    ) : null}
+
                     <div className="timestamp-panel">
                       <div>
                         <strong>Đoạn phù hợp với bài đang học</strong>
@@ -1228,7 +1303,7 @@ export default function Home() {
                       </div>
                       {activeVideoMatches.length > 0 ? (
                         activeVideoMatches.map((match) => (
-                          <button className="timestamp-link" key={match.id} type="button" onClick={() => playVideoAt(activeVideoLesson.id, match.startSeconds)}>
+                          <button className="timestamp-link" key={match.id} type="button" onClick={() => activeVideoLesson && playVideoAt(activeVideoLesson.id, match.startSeconds)}>
                             <strong>{secondsToTimestamp(match.startSeconds)}-{secondsToTimestamp(match.endSeconds)}</strong>
                             <span>
                               <b>{match.title}</b>
@@ -1242,9 +1317,223 @@ export default function Home() {
                     </div>
                   </>
                 ) : null}
+
+                  </div>
+
+                  <aside className="video-mini-tutor">
+                    <div className="mini-tutor-header">
+                      <div>
+                        <strong>AI tutor</strong>
+                        <span>{activeVideoLesson.title}</span>
+                      </div>
+                      <small>{videoMessages.filter((message) => !isLessonSupportMessage(message)).length} tin</small>
+                    </div>
+                    <div className="mini-tutor-log">
+                      {videoMessages.slice(-5).map((message) => (
+                        <div key={message.id} className={`message ${message.role}`}>
+                          {message.role === 'assistant' ? <AssistantMessage content={message.content} /> : message.content}
+                        </div>
+                      ))}
+                      {isAsking && activeChatLessonId === activeVideoLesson.id && (
+                        <div className="message assistant pending">
+                          <Loader2 className="spin" size={16} />
+                          Đang trả lời...
+                        </div>
+                      )}
+                    </div>
+                    <div className="quick-support mini-tutor-actions">
+                      <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => setVideoQuestion(`Giải thích dễ hiểu hơn bài "${activeVideoLesson.title}"`)}>
+                        Giải thích
+                      </button>
+                      <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => setVideoQuestion(`Cho tôi ví dụ áp dụng cho bài "${activeVideoLesson.title}"`)}>
+                        Ví dụ
+                      </button>
+                    </div>
+                    <form className="mini-tutor-form" onSubmit={askVideoTutor}>
+                      <input
+                        value={videoQuestion}
+                        disabled={isAsking || isQuizInProgress}
+                        onChange={(event) => setVideoQuestion(event.target.value)}
+                        placeholder={isQuizInProgress ? 'Hoàn thành quiz trước khi hỏi tutor...' : 'Hỏi nhanh về video này...'}
+                      />
+                      <button type="submit" disabled={!videoQuestion.trim() || isAsking || isQuizInProgress}>
+                        <CheckCircle2 size={16} />
+                      </button>
+                    </form>
+                  </aside>
+                </div>
               </>
             ) : (
               <div className="empty-state">Chọn một bài học để xem video gợi ý.</div>
+            )}
+          </section>
+        </section>
+      ) : view === 'quiz' ? (
+        <section className="quiz-workspace">
+          <aside className="panel video-sidebar">
+            <div className="panel-heading">
+              <FileQuestion size={18} />
+              <h2>Quiz theo tuần</h2>
+            </div>
+            {plan ? (
+              plan.lessons.map((lesson) => (
+                <button
+                  className={activeVideoLesson?.id === lesson.id ? 'active' : ''}
+                  key={lesson.id}
+                  type="button"
+                  disabled={isQuizInProgress && lesson.id !== activeQuizSessionLessonId}
+                  onClick={() => {
+                    setActiveVideoLessonId(lesson.id)
+                  }}
+                >
+                  <strong>Tuần {lesson.week}</strong>
+                  <span>{lesson.title}</span>
+                </button>
+              ))
+            ) : (
+              <div className="empty-state compact">Tạo lộ trình và phân tích video trước khi làm quiz.</div>
+            )}
+          </aside>
+
+          <section className="panel quiz-main">
+            {activeVideoLesson ? (
+              <>
+                <div className="quiz-header">
+                  <div>
+                    <p className="eyebrow">Kiểm tra kiến thức đã học</p>
+                    <strong>Bài kiểm tra năng lực tuần {activeVideoLesson.week}</strong>
+                    <span>
+                      {activeQuiz
+                        ? `${activeQuiz.questions.length} bài tập cơ bản/nâng cao theo chủ đề tuần học.`
+                        : videoAnalysis
+                          ? 'Tạo bài kiểm tra theo bài học, có thể kèm timestamp từ video đã phân tích.'
+                          : 'Tạo bài kiểm tra theo chủ đề và nội dung tuần học hiện tại.'}
+                    </span>
+                  </div>
+                  <div className="quiz-actions">
+                    <button className="secondary-button" type="button" disabled={!plan || isGeneratingQuiz || isQuizInProgress} onClick={generateLessonQuiz}>
+                      {isGeneratingQuiz ? <Loader2 className="spin" size={18} /> : <FileQuestion size={18} />}
+                      {activeQuiz ? 'Tạo lại bài kiểm tra' : 'Tạo bài kiểm tra'}
+                    </button>
+                    <button className="primary-button" type="button" disabled={!activeQuiz || isQuizInProgress} onClick={startActiveQuiz}>
+                      <CheckCircle2 size={18} />
+                      {isActiveQuizSubmitted ? 'Làm lại' : 'Bắt đầu'}
+                    </button>
+                    <button className="secondary-button" type="button" disabled={!isActiveQuizStarted || !canCompleteActiveQuiz} onClick={completeActiveQuiz}>
+                      Hoàn thành
+                    </button>
+                  </div>
+                </div>
+
+                {isQuizInProgress && (
+                  <div className="quiz-lock-note">
+                    Đang làm quiz. Tất cả tab khác và AI tutor tạm khóa cho đến khi bạn bấm Hoàn thành.
+                  </div>
+                )}
+
+                {activeQuiz && (isActiveQuizStarted || isActiveQuizSubmitted) ? (
+                  <div className="quiz-list">
+                    {activeQuizResult && isActiveQuizSubmitted && (
+                      <div className="quiz-result-card">
+                        <div>
+                          <span>Điểm quiz</span>
+                          <strong>{activeQuizResult.scorePercent}%</strong>
+                          <small>
+                            {activeQuizResult.correctCount}/{activeQuizResult.totalQuestions} câu đúng, đã trả lời {activeQuizResult.answeredCount}/{activeQuizResult.totalQuestions} câu.
+                          </small>
+                        </div>
+                        {activeQuizResult.wrongQuestions.length > 0 ? (
+                          <>
+                            <p>Lỗi sai</p>
+                            <ol>
+                              {activeQuizResult.wrongQuestions.map((item) => (
+                                <li key={item.id}>
+                                  <b>{item.question}</b>
+                                  <span>Bạn chọn: {item.selectedAnswer}</span>
+                                  <span>Đáp án đúng: {item.correctAnswer}</span>
+                                </li>
+                              ))}
+                            </ol>
+                            <p>Cần học kỹ lại</p>
+                            <ul>
+                              {activeQuizResult.reviewTopics.map((topic) => (
+                                <li key={topic}>{topic}</li>
+                              ))}
+                            </ul>
+                          </>
+                        ) : activeQuizResult.answeredCount === activeQuizResult.totalQuestions ? (
+                          <p>Bạn đã hoàn thành quiz. Tuần học này được đánh dấu hoàn thành.</p>
+                        ) : (
+                          <p>Bạn đã nộp quiz. Các câu chưa trả lời được tính là chưa hoàn thành.</p>
+                        )}
+                      </div>
+                    )}
+                    {activeQuiz.questions.map((quizQuestion, questionIndex) => {
+                      const selectedIndex = activeQuizAnswers[quizQuestion.id]
+                      const hasAnswered = typeof selectedIndex === 'number'
+                      const isCorrect = isActiveQuizSubmitted && hasAnswered && selectedIndex === quizQuestion.correctIndex
+
+                      return (
+                        <div className="quiz-question" key={quizQuestion.id}>
+                          <div className="quiz-question-title">
+                            <div className="quiz-question-meta">
+                              <span>Câu {questionIndex + 1}</span>
+                              <span>{quizDifficultyLabel(quizQuestion.difficulty)}</span>
+                              <span>{quizSkillLabel(quizQuestion.skillType)}</span>
+                            </div>
+                            <strong>{quizQuestion.question}</strong>
+                          </div>
+                          <div className="quiz-options">
+                            {quizQuestion.options.map((option, optionIndex) => {
+                              const isSelected = selectedIndex === optionIndex
+                              const isAnswer = isActiveQuizSubmitted && quizQuestion.correctIndex === optionIndex
+                              const optionClass = [
+                                isSelected ? 'selected' : '',
+                                isAnswer ? 'correct' : '',
+                                isActiveQuizSubmitted && hasAnswered && isSelected && !isCorrect ? 'wrong' : ''
+                              ]
+                                .filter(Boolean)
+                                .join(' ')
+
+                              return (
+                                <button
+                                  className={optionClass}
+                                  disabled={!isActiveQuizStarted || hasAnswered || isActiveQuizSubmitted}
+                                  key={`${quizQuestion.id}-${optionIndex}`}
+                                  type="button"
+                                  onClick={() => chooseQuizAnswer(quizQuestion.id, optionIndex)}
+                                >
+                                  <b>{String.fromCharCode(65 + optionIndex)}</b>
+                                  <span>{option}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                          {isActiveQuizSubmitted && hasAnswered && (
+                            <p className={isCorrect ? 'quiz-feedback correct' : 'quiz-feedback wrong'}>
+                              {isCorrect ? 'Đúng rồi.' : `Chưa đúng. Đáp án đúng là ${String.fromCharCode(65 + quizQuestion.correctIndex)}.`} {quizQuestion.explanation}
+                            </p>
+                          )}
+                          {isActiveQuizSubmitted && quizQuestion.sourceTimestamp && (
+                            <button className="quiz-source-link" type="button" onClick={() => activeVideoLesson && playVideoAt(activeVideoLesson.id, quizQuestion.sourceStartSeconds || 0)}>
+                              Xem lại video: {quizQuestion.sourceTitle || 'Đoạn liên quan'} ({quizQuestion.sourceTimestamp})
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : activeQuiz ? (
+                  <div className="quiz-start-card">
+                    <strong>Sẵn sàng làm bài kiểm tra tuần {activeVideoLesson.week}</strong>
+                    <p>Bấm Bắt đầu để mở câu hỏi. Trong lúc làm quiz, các tab khác và AI tutor sẽ bị khóa. Điểm số và đáp án chỉ hiện sau khi bấm Hoàn thành.</p>
+                  </div>
+                ) : (
+                  <p className="quiz-empty">Bấm Tạo bài kiểm tra để sinh bài tập đánh giá trình độ theo đúng chủ đề của tuần học.</p>
+                )}
+              </>
+            ) : (
+              <div className="empty-state">Chọn một bài học để làm quiz.</div>
             )}
           </section>
         </section>
@@ -1259,38 +1548,35 @@ export default function Home() {
             {chatTopics.length === 0 ? (
               <div className="empty-state compact">Tạo lộ trình học trước để mở không gian hỏi đáp.</div>
             ) : (
-              chatTopics.map((topic) => (
-                <div className="chat-topic-group" key={topic.id}>
-                  <button
-                    className={`topic-button ${activeChatTopicId === topic.id ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => {
-                      setActiveChatTopicId(topic.id)
-                      setActiveChatLessonId(topic.lessons[0]?.id || null)
-                      if (topic.lessons[0]) ensureLessonChat(topic.lessons[0])
-                    }}
-                  >
-                    <strong>{topic.topic}</strong>
-                    <span>{topic.lessons.length} bài học</span>
-                  </button>
-                  <div className="chat-lesson-list">
-                    {topic.lessons.map((lesson) => {
-                      const count = (chatHistoryByLesson[lesson.id] || []).filter((message) => !isLessonSupportMessage(message)).length
-                      return (
-                        <button
-                          className={activeChatLessonId === lesson.id ? 'active' : ''}
-                          key={lesson.id}
-                          type="button"
-                          onClick={() => selectChatLesson(topic, lesson)}
-                        >
-                          <span>Tuần {lesson.week}: {lesson.title}</span>
-                          <small>{count} tin</small>
-                        </button>
-                      )
-                    })}
+              chatTopics.map((topic) => {
+                const isExpanded = Boolean(expandedChatTopicIds[topic.id])
+                return (
+                  <div className="chat-topic-group" key={topic.id}>
+                    <button className={`topic-button ${activeChatTopicId === topic.id ? 'active' : ''}`} type="button" onClick={() => toggleChatTopic(topic)}>
+                      <strong>{topic.topic}</strong>
+                      <span>{topic.lessons.length} bài học</span>
+                    </button>
+                    {isExpanded && (
+                      <div className="chat-lesson-list">
+                        {topic.lessons.map((lesson) => {
+                          const count = (chatHistoryByLesson[lesson.id] || []).filter((message) => !isLessonSupportMessage(message)).length
+                          return (
+                            <button
+                              className={activeChatLessonId === lesson.id ? 'active' : ''}
+                              key={lesson.id}
+                              type="button"
+                              onClick={() => selectChatLesson(topic, lesson)}
+                            >
+                              <span>Tuần {lesson.week}: {lesson.title}</span>
+                              <small>{count} tin</small>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </aside>
 
@@ -1315,16 +1601,16 @@ export default function Home() {
                 </div>
 
                 <div className="quick-support chat-quick-support">
-                  <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Giải thích dễ hiểu hơn bài "${selectedChatLesson.title}"`)}>
+                  <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => sendTutorQuestion(`Giải thích dễ hiểu hơn bài "${selectedChatLesson.title}"`)}>
                     Giải thích
                   </button>
-                  <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Cho tôi một ví dụ thực hành cho bài "${selectedChatLesson.title}"`)}>
+                  <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => sendTutorQuestion(`Cho tôi một ví dụ thực hành cho bài "${selectedChatLesson.title}"`)}>
                     Ví dụ
                   </button>
-                  <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Kiểm tra tôi bằng 3 câu hỏi ngắn về bài "${selectedChatLesson.title}"`)}>
+                  <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => sendTutorQuestion(`Kiểm tra tôi bằng 3 câu hỏi ngắn về bài "${selectedChatLesson.title}"`)}>
                     Kiểm tra
                   </button>
-                  <button type="button" disabled={isAsking} onClick={() => sendTutorQuestion(`Tôi nên xem lại phút nào, đoạn nào trong video cho bài "${selectedChatLesson.title}"?`)}>
+                  <button type="button" disabled={isAsking || isQuizInProgress} onClick={() => sendTutorQuestion(`Tôi nên xem lại phút nào, đoạn nào trong video cho bài "${selectedChatLesson.title}"?`)}>
                     Timestamp
                   </button>
                 </div>
@@ -1357,8 +1643,8 @@ export default function Home() {
                 </div>
 
                 <form className="chat-form" onSubmit={askTutor}>
-                  <input value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Hỏi tutor về bài học này..." />
-                  <button type="submit" disabled={!selectedChatLesson || isAsking}>
+                  <input value={question} disabled={isQuizInProgress} onChange={(event) => setQuestion(event.target.value)} placeholder={isQuizInProgress ? 'Hoàn thành quiz trước khi hỏi tutor...' : 'Hỏi tutor về bài học này...'} />
+                  <button type="submit" disabled={!selectedChatLesson || isAsking || isQuizInProgress}>
                     <CheckCircle2 size={18} />
                   </button>
                 </form>
@@ -1408,27 +1694,9 @@ function topicToPlan(topic: ChatTopic): LearningPlan {
   }
 }
 
-function upsertSavedPlan(current: SavedLearningPlan[], nextPlan: LearningPlan): SavedLearningPlan[] {
+function upsertSavedPlan(current: LearningPlan[], nextPlan: LearningPlan) {
   const normalized = normalizeLoadedPlan(nextPlan)
   return [normalized, ...current.filter((item) => planStorageId(item) !== planStorageId(normalized))].slice(0, 8)
-}
-
-function withSavedCopyId(plan: LearningPlan): SavedLearningPlan {
-  return { ...normalizeLoadedPlan(plan), savedCopyId: crypto.randomUUID() }
-}
-
-function findSavedPlanByName(savedPlans: SavedLearningPlan[], name: string) {
-  const normalizedName = normalizePlanName(name)
-  return savedPlans.find((savedPlan) => normalizePlanName(savedPlan.profile.topic) === normalizedName) || null
-}
-
-function removeSavedPlansByName(savedPlans: SavedLearningPlan[], name: string) {
-  const normalizedName = normalizePlanName(name)
-  return savedPlans.filter((savedPlan) => normalizePlanName(savedPlan.profile.topic) !== normalizedName)
-}
-
-function normalizePlanName(value: string) {
-  return value.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 function omitRecordKey<T>(record: Record<string, T>, key: string) {
@@ -1437,33 +1705,28 @@ function omitRecordKey<T>(record: Record<string, T>, key: string) {
   return next
 }
 
-function setLessonFlag(setter: (value: SetStateAction<Record<string, boolean>>) => void, lessonId: string, value: boolean) {
-  setter((current) => {
-    if (value) return { ...current, [lessonId]: true }
-    return omitRecordKey(current, lessonId)
-  })
-}
-
-function setLessonMessage(setter: (value: SetStateAction<Record<string, string>>) => void, lessonId: string, value: string) {
-  setter((current) => {
-    if (value) return { ...current, [lessonId]: value }
-    return omitRecordKey(current, lessonId)
-  })
-}
-
-function setLessonMessages(setter: (value: SetStateAction<Record<string, string>>) => void, lessons: Lesson[], value: string) {
-  setter((current) => {
-    const next = { ...current }
-    for (const lesson of lessons) {
-      if (value) next[lesson.id] = value
-      else delete next[lesson.id]
-    }
-    return next
-  })
-}
-
 function filterRecordByKeys<T>(record: Record<string, T>, keys: Set<string>, keepMatching: boolean) {
   return Object.fromEntries(Object.entries(record).filter(([key]) => (keepMatching ? keys.has(key) : !keys.has(key))))
+}
+
+function pruneChatDataForPlans(plans: LearningPlan[], topics: ChatTopic[], history: ChatHistoryByLesson) {
+  const validTopicIds = new Set(plans.map((item) => buildChatTopic(item).id))
+  const validLessonIds = new Set(plans.flatMap((item) => item.lessons.map((lesson) => lesson.id)))
+  return {
+    topics: topics.filter((topic) => validTopicIds.has(topic.id)),
+    history: filterRecordByKeys(history, validLessonIds, true)
+  }
+}
+
+function sameTopicIds(left: ChatTopic[], right: ChatTopic[]) {
+  if (left.length !== right.length) return false
+  return left.every((topic, index) => topic.id === right[index]?.id)
+}
+
+function sameRecordKeys<T>(left: Record<string, T>, right: Record<string, T>) {
+  const leftKeys = Object.keys(left).sort()
+  const rightKeys = Object.keys(right).sort()
+  return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index])
 }
 
 function legacyLessonMap<T>(plan: LearningPlan | null, value: T | null | undefined): Record<string, T> {
@@ -1473,8 +1736,7 @@ function legacyLessonMap<T>(plan: LearningPlan | null, value: T | null | undefin
 }
 
 function planStorageId(plan: LearningPlan) {
-  const savedCopyId = (plan as SavedLearningPlan).savedCopyId
-  return slugify(`${plan.profile.topic}-${plan.profile.goal}-${plan.profile.durationWeeks}-${plan.profile.videoLanguage}-${savedCopyId || ''}`)
+  return slugify(`${plan.profile.topic}-${plan.profile.goal}-${plan.profile.durationWeeks}-${plan.profile.videoLanguage}`)
 }
 
 function videoJobKey(plan: LearningPlan, lesson: Lesson) {
@@ -1531,47 +1793,99 @@ function normalizeLessonList(lessons: Lesson[], profile: LearnerProfile) {
 }
 
 function buildInitialSchedule(lessons: Lesson[], preference: LearnerProfile['learningTimePreference'] = 'evening'): ScheduleEvent[] {
-  const start = preferredScheduleStart[preference]
-  const practiceStart = start === '19:00' ? '19:00' : start
-  const reviewStart = start === '07:00' ? '12:00' : start
+  return buildParallelSchedule([
+    {
+      title: 'Lộ trình hiện tại',
+      summary: '',
+      prerequisites: [],
+      prerequisiteGraph: [],
+      recommendedWeeks: lessons.length,
+      durationAdvice: '',
+      profile: { ...initialProfile, learningTimePreference: preference },
+      lessons
+    }
+  ])
+}
 
-  return lessons.flatMap((lesson) => {
-    const mainMinutes = Math.min(120, Math.max(60, Math.round(lesson.durationMinutes * 0.45)))
-    const practiceMinutes = Math.min(90, Math.max(45, Math.round(lesson.durationMinutes * 0.3)))
+function buildParallelSchedule(plans: LearningPlan[]): ScheduleEvent[] {
+  const occupied = new Set<string>()
+  const events: ScheduleEvent[] = []
+  const dayPattern = ['Thứ 2', 'Thứ 3', 'Thứ 5', 'Thứ 7', 'Thứ 4', 'Thứ 6', 'Chủ nhật']
 
-    return [
-      {
-        id: `study-${lesson.id}`,
-        lessonId: lesson.id,
-        week: lesson.week,
-        title: lesson.title,
-        day: 'Thứ 2',
-        start,
-        end: addMinutesToTime(start, mainMinutes),
-        kind: 'study' as const
-      },
-      {
-        id: `practice-${lesson.id}`,
-        lessonId: lesson.id,
-        week: lesson.week,
-        title: `Thực hành: ${lesson.title}`,
-        day: 'Thứ 4',
-        start: practiceStart,
-        end: addMinutesToTime(practiceStart, practiceMinutes),
-        kind: 'practice' as const
-      },
-      {
-        id: `review-${lesson.id}`,
-        lessonId: lesson.id,
-        week: lesson.week,
-        title: `Ôn + quiz: ${lesson.title}`,
-        day: 'Thứ 6',
-        start: reviewStart,
-        end: addMinutesToTime(reviewStart, 30),
-        kind: 'review' as const
-      }
-    ]
+  plans.forEach((sourcePlan, planIndex) => {
+    const planId = planStorageId(sourcePlan)
+    const preferredStart = preferredScheduleStart[sourcePlan.profile.learningTimePreference]
+    const slotOrder = buildPreferredSlotOrder(preferredStart)
+
+    sourcePlan.lessons.forEach((lesson, lessonIndex) => {
+      const mainMinutes = Math.min(120, Math.max(60, Math.round(lesson.durationMinutes * 0.45)))
+      const practiceMinutes = Math.min(75, Math.max(45, Math.round(lesson.durationMinutes * 0.25)))
+      const seed = planIndex * 2 + lessonIndex
+      const study = findOpenScheduleSlot(occupied, lesson.week, dayPattern, slotOrder, seed)
+      const practice = findOpenScheduleSlot(occupied, lesson.week, dayPattern, slotOrder, seed + 2)
+      const review = findOpenScheduleSlot(occupied, lesson.week, dayPattern, slotOrder, seed + 4)
+
+      events.push(
+        {
+          id: `study-${planId}-${lesson.id}`,
+          planId,
+          planTitle: sourcePlan.profile.topic,
+          lessonId: lesson.id,
+          week: lesson.week,
+          title: `${sourcePlan.profile.topic}: ${lesson.title}`,
+          day: study.day,
+          start: study.start,
+          end: addMinutesToTime(study.start, mainMinutes),
+          kind: 'study'
+        },
+        {
+          id: `practice-${planId}-${lesson.id}`,
+          planId,
+          planTitle: sourcePlan.profile.topic,
+          lessonId: lesson.id,
+          week: lesson.week,
+          title: `Thực hành: ${sourcePlan.profile.topic} / ${lesson.title}`,
+          day: practice.day,
+          start: practice.start,
+          end: addMinutesToTime(practice.start, practiceMinutes),
+          kind: 'practice'
+        },
+        {
+          id: `review-${planId}-${lesson.id}`,
+          planId,
+          planTitle: sourcePlan.profile.topic,
+          lessonId: lesson.id,
+          week: lesson.week,
+          title: `Quiz: ${sourcePlan.profile.topic} / ${lesson.title}`,
+          day: review.day,
+          start: review.start,
+          end: addMinutesToTime(review.start, 30),
+          kind: 'review'
+        }
+      )
+    })
   })
+
+  return events
+}
+
+function buildPreferredSlotOrder(preferredStart: string) {
+  const preferredIndex = Math.max(0, scheduleSlots.indexOf(preferredStart))
+  return [...scheduleSlots].sort((left, right) => Math.abs(scheduleSlots.indexOf(left) - preferredIndex) - Math.abs(scheduleSlots.indexOf(right) - preferredIndex))
+}
+
+function findOpenScheduleSlot(occupied: Set<string>, week: number, days: string[], slots: string[], seed: number) {
+  for (let offset = 0; offset < days.length * slots.length; offset += 1) {
+    const day = days[(seed + offset) % days.length]
+    const start = slots[Math.floor((seed + offset) / days.length) % slots.length]
+    const key = `${week}-${day}-${start}`
+    if (!occupied.has(key)) {
+      occupied.add(key)
+      return { day, start }
+    }
+  }
+
+  return { day: days[0], start: slots[0] }
 }
 
 function addMinutesToTime(value: string, minutes: number) {
@@ -1605,12 +1919,25 @@ function selectDistinctVideoMatches(lessons: Lesson[], analysis: VideoAnalysis, 
   return []
 }
 
+function buildQuizVideoMatches(analysis: VideoAnalysis, lessonId: string, activeMatches: VideoSearchMatch[]) {
+  if (activeMatches.length > 0) return activeMatches.slice(0, 10)
+  const lessonMatches = analysis.matchesByLessonId[lessonId] || []
+  if (lessonMatches.length > 0) return lessonMatches.slice(0, 10)
+
+  return analysis.video.segments.slice(0, 10).map((segment) => ({
+    ...segment,
+    score: 0,
+    url: withYoutubeStartTime(analysis.video.url, segment.startSeconds),
+    videoTitle: analysis.video.title
+  }))
+}
+
 function buildTutorVideoReferences(
   question: string,
   lesson: Lesson,
   topic: ChatTopic,
   analysisByLesson: Record<string, VideoAnalysis>
-): TutorVideoReference[] {
+) {
   const analysis = analysisByLesson[lesson.id]
   if (!analysis) return []
 
@@ -1687,22 +2014,69 @@ function youtubeVideoId(value: string) {
   return ''
 }
 
-function normalizeVideoUrlForComparison(value: string) {
-  try {
-    const url = new URL(value)
-    const host = url.hostname.replace(/^www\./, '')
-    const videoId = host === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v')
-    if (videoId) return `youtube:${videoId}`
-    url.search = ''
-    url.hash = ''
-    return url.toString().replace(/\/$/, '')
-  } catch {
-    return value.trim().toLowerCase()
+function tokenizeSearchText(value: string) {
+  return normalizeSearchText(value).split(/\s+/).filter((token) => token.length >= 2)
+}
+
+function quizDifficultyLabel(value: QuizQuestion['difficulty']) {
+  if (value === 'advanced') return 'Nâng cao'
+  return 'Cơ bản'
+}
+
+function quizSkillLabel(value: QuizQuestion['skillType']) {
+  if (value === 'application') return 'Áp dụng'
+  if (value === 'debugging') return 'Tìm lỗi'
+  if (value === 'design') return 'Thiết kế'
+  if (value === 'implementation') return 'Thực thi'
+  return 'Khái niệm'
+}
+
+function buildQuizResult(quiz: LessonQuiz, answers: Record<string, number>) {
+  const answeredQuestions = quiz.questions.filter((question) => typeof answers[question.id] === 'number')
+  const wrongQuestions = answeredQuestions
+    .filter((question) => answers[question.id] !== question.correctIndex)
+    .map((question) => ({
+      id: question.id,
+      question: question.question,
+      selectedAnswer: question.options[answers[question.id]] || 'Chưa rõ',
+      correctAnswer: question.options[question.correctIndex] || 'Chưa rõ',
+      explanation: question.explanation
+    }))
+  const correctCount = answeredQuestions.length - wrongQuestions.length
+  const totalQuestions = quiz.questions.length || 1
+  const reviewTopics = Array.from(
+    new Set(
+      wrongQuestions.map((item) => {
+        const hint = item.explanation || item.correctAnswer || item.question
+        return clampText(hint, 120)
+      })
+    )
+  ).slice(0, 5)
+
+  return {
+    totalQuestions,
+    answeredCount: answeredQuestions.length,
+    correctCount,
+    scorePercent: Math.round((correctCount / totalQuestions) * 100),
+    wrongQuestions,
+    reviewTopics
   }
 }
 
-function tokenizeSearchText(value: string) {
-  return normalizeSearchText(value).split(/\s+/).filter((token) => token.length >= 2)
+function clampText(value: string, limit: number) {
+  const normalized = value.trim().replace(/\s+/g, ' ')
+  if (normalized.length <= limit) return normalized
+  return `${normalized.slice(0, limit - 3).trim()}...`
+}
+
+function formatVideoUiError(value: string) {
+  if (/video is not available|this video is not available|not available/i.test(value)) {
+    return 'Video YouTube này không khả dụng. Hãy bấm gợi ý lại hoặc dán URL video khác.'
+  }
+  if (/yt-dlp|Command failed|storyboard|fragments|formats|youtube/i.test(value)) {
+    return 'Không lấy được dữ liệu video từ YouTube. Hãy thử video khác hoặc bấm gợi ý lại.'
+  }
+  return clampText(value.split('\n')[0] || 'Không xử lý được video.', 180)
 }
 
 function stableTopicId(profile: LearnerProfile) {
@@ -1800,9 +2174,18 @@ function formatAssetItem(item: unknown) {
 
   if (item && typeof item === 'object') {
     const record = item as Record<string, unknown>
-    const title = firstString(record.title, record.name, record.text, record.label, record.description, record.reason)
+    const title = firstString(record.title, record.name, record.text, record.label, record.description, record.reason, record.searchKeyword)
     const url = firstString(record.url, record.link, record.href)
+    const detailParts = [
+      firstString(record.type) ? `[${firstString(record.type)}]` : '',
+      title,
+      firstString(record.primaryLanguage) ? `Ngôn ngữ: ${firstString(record.primaryLanguage)}` : '',
+      Array.isArray(record.englishKeywords) && record.englishKeywords.length ? `EN: ${record.englishKeywords.map(String).slice(0, 3).join(', ')}` : '',
+      Array.isArray(record.vietnameseKeywords) && record.vietnameseKeywords.length ? `VI: ${record.vietnameseKeywords.map(String).slice(0, 3).join(', ')}` : '',
+      firstString(record.whyRecommended)
+    ].filter(Boolean)
 
+    if (detailParts.length) return { text: detailParts.join(' - '), url: url || undefined }
     if (title && url) return { text: title, url }
     if (title) return { text: title }
     if (url) return { text: url, url }

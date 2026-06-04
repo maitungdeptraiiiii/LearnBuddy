@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { TUTOR_SYSTEM_PROMPT } from '@/lib/tutor-prompt'
 import type { ChatMessage, LearningPlan, Lesson } from '@/lib/types'
 import { lawRagChatText } from '@/lib/law-rag-llm'
 
@@ -26,8 +27,9 @@ export async function POST(request: Request) {
     const answer = await lawRagChatText([
       {
         role: 'system',
-        content:
-          'You are LearnMate, a concise Vietnamese AI tutor. Teach according to the learner profile, current lesson, plan, recent chat, and videoReferences. Answer in Vietnamese, concise and easy to scan. Do not use Markdown syntax: no ## headings, no **bold**, no horizontal rules, no bullet characters. Use short plain labels ending with ":" such as "Mục tiêu:", "Cách làm:", "Ví dụ:", "Video nên xem:", "Bước tiếp theo:". Put each idea on its own line. Give actionable explanations and one short next step. Use homework, resources, quiz, and checkpoint to check whether the learner understands the lesson. When videoReferences are provided, treat them as retrieval evidence from the lesson video. If a reference is relevant to the question, include exactly one "Video nên xem:" line with the timestamp label and the raw URL. Do not invent timestamps or URLs. If videoReferences are empty or irrelevant, answer normally and do not mention video.'
+        content: `${TUTOR_SYSTEM_PROMPT}
+
+Khi videoReferences được cung cấp, hãy xem chúng là bằng chứng retrieval từ video của bài học. Nếu có reference liên quan trực tiếp đến câu hỏi, thêm đúng một dòng "Video nên xem:" gồm nhãn timestamp và URL raw. Không bịa timestamp hoặc URL. Nếu videoReferences rỗng hoặc không liên quan, trả lời bình thường và không nhắc video.`
       },
       {
         role: 'user',

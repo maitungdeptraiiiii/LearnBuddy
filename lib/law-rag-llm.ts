@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const LAW_RAG_ROOT = process.env.LAW_RAG_ROOT || 'C:\\Users\\Admin\\Desktop\\Law-RAG'
-
 export interface LawRagRuntime {
   provider: 'openai' | 'local'
   model: string
@@ -101,8 +99,11 @@ async function chatCompletions(runtime: LawRagRuntime, body: Record<string, unkn
 
 function loadLawRagEnv() {
   const env: Record<string, string> = { ...process.env } as Record<string, string>
+  const lawRagRoot = process.env.LAW_RAG_ROOT?.trim()
+  if (!lawRagRoot) return env
+
   try {
-    const content = readFileSync(join(LAW_RAG_ROOT, '.env'), 'utf-8')
+    const content = readFileSync(join(lawRagRoot, '.env'), 'utf-8')
     for (const line of content.split(/\r?\n/)) {
       const trimmed = line.trim()
       if (!trimmed || trimmed.startsWith('#')) continue

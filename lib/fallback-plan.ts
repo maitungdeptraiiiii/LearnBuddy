@@ -1,4 +1,4 @@
-import type { LearnerProfile, LearningPlan, Lesson, PrerequisiteRelationship } from '@/lib/types'
+import type { LearnerProfile, LearningPlan, Lesson, PrerequisiteRelationship, RecommendedResource } from '@/lib/types'
 
 const paceMultiplier = {
   gentle: 0.85,
@@ -55,6 +55,7 @@ export function generateFallbackPlan(profile: LearnerProfile): LearningPlan {
     activities: buildActivities(profile, topicProfile, index, selectedWeeks, durationAdvice),
     homework: buildHomework(profile, phase, index),
     resources: buildResources(profile, topicProfile, phase, index),
+    recommendedResources: buildRecommendedResources(profile, topicProfile, phase, index),
     checkpoint: phase.checkpoint,
     quiz: buildQuiz(profile, phase, index),
     status: 'todo'
@@ -318,6 +319,62 @@ function buildResources(profile: LearnerProfile, topicProfile: TopicProfile, pha
     `Tài liệu nhập môn về ${topic}: đọc phần khái niệm và ví dụ cơ bản.`,
     `Video/bài giảng liên quan đến "${phase.title}": ưu tiên đoạn giải thích ${foundation}.`,
     `Checklist tự học: khái niệm, ví dụ, lỗi thường gặp, câu hỏi kiểm tra.`
+  ]
+}
+
+function buildRecommendedResources(profile: LearnerProfile, topicProfile: TopicProfile, phase: PlanPhase, index: number): RecommendedResource[] {
+  const topic = clean(profile.topic)
+  const foundation = topicProfile.prerequisites[index % topicProfile.prerequisites.length]
+  const level = profile.level === 'advanced' ? 'Advanced' : profile.level === 'intermediate' ? 'Intermediate' : 'Beginner'
+  const primaryLanguage = profile.videoLanguage === 'en' ? 'English' : 'Vietnamese'
+  const styleFit =
+    profile.learningStyle === 'concepts'
+      ? 'Ưu tiên giải thích bản chất, khái niệm và nguyên lý.'
+      : profile.learningStyle === 'practice'
+        ? 'Ưu tiên hướng dẫn thực hành, bài tập và ví dụ thao tác.'
+        : profile.learningStyle === 'project'
+          ? 'Gắn trực tiếp với project hoặc sản phẩm cuối.'
+          : 'Kết hợp lý thuyết nền tảng và thực hành.'
+  const baseEnglish = `${topic} ${phase.title}`.replace(/\s+/g, ' ').trim()
+  const baseVietnamese = `${topic} ${phase.title}`.replace(/\s+/g, ' ').trim()
+
+  return [
+    {
+      type: 'video',
+      primaryLanguage,
+      searchKeyword: primaryLanguage === 'English' ? `${baseEnglish} explained ${level.toLowerCase()}` : `giải thích ${baseVietnamese}`,
+      englishKeywords: [
+        `${baseEnglish} explained`,
+        `${baseEnglish} tutorial`,
+        `${baseEnglish} ${level.toLowerCase()}`,
+        `${baseEnglish} step by step`,
+        `${foundation} ${topic} introduction`
+      ],
+      vietnameseKeywords: [`giải thích ${baseVietnamese}`, `hướng dẫn ${baseVietnamese}`, `${topic} cho người mới bắt đầu`, `thực hành ${baseVietnamese}`],
+      level,
+      learningStyleFit: styleFit,
+      whyRecommended: `Từ khóa video bám sát tuần ${index + 1} và checkpoint của bài "${phase.title}".`
+    },
+    {
+      type: 'article',
+      primaryLanguage,
+      searchKeyword: primaryLanguage === 'English' ? `${baseEnglish} concepts article` : `bài viết ${baseVietnamese}`,
+      englishKeywords: [`${baseEnglish} concepts`, `${baseEnglish} fundamentals`, `${baseEnglish} examples`, `${foundation} explained simply`],
+      vietnameseKeywords: [`bài viết ${baseVietnamese}`, `khái niệm ${baseVietnamese}`, `ví dụ ${baseVietnamese}`],
+      level,
+      learningStyleFit: styleFit,
+      whyRecommended: 'Bài đọc giúp củng cố khái niệm trước khi làm bài tập hoặc project.'
+    },
+    {
+      type: profile.learningStyle === 'project' ? 'project' : 'exercise',
+      primaryLanguage,
+      searchKeyword: primaryLanguage === 'English' ? `${baseEnglish} hands on exercise project` : `bài tập thực hành ${baseVietnamese}`,
+      englishKeywords: [`${baseEnglish} hands-on`, `${baseEnglish} exercise`, `${baseEnglish} project`, `${baseEnglish} implementation`],
+      vietnameseKeywords: [`bài tập ${baseVietnamese}`, `thực hành ${baseVietnamese}`, `dự án ${baseVietnamese}`, `ứng dụng ${baseVietnamese} thực tế`],
+      level,
+      learningStyleFit: styleFit,
+      whyRecommended: 'Từ khóa này hỗ trợ luyện tập và tạo đầu ra cụ thể cho tuần học.'
+    }
   ]
 }
 

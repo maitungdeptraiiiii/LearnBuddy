@@ -14,6 +14,7 @@ type YtDlpInfo = {
   description?: string
   duration?: number
   webpage_url?: string
+  http_headers?: Record<string, string>
   chapters?: Array<{
     title?: string
     start_time?: number
@@ -78,7 +79,9 @@ export async function suggestYoutubeVideo(plan: LearningPlan, lesson: Lesson | n
   const excluded = new Set(excludedUrls.map(normalizeVideoUrlForComparison).filter(Boolean))
   const allCandidates = await searchYoutubeCandidates(query, 24)
   const distinctCandidates = allCandidates.filter((candidate) => !excluded.has(normalizeVideoUrlForComparison(candidate.webpage_url || canonicalYoutubeUrl(candidate.id || ''))))
-  const candidates = distinctCandidates.length > 0 ? distinctCandidates : allCandidates
+  const sourceCandidates = distinctCandidates.length > 0 ? distinctCandidates : allCandidates
+  const relevantCandidates = prioritizeRelevantVideoCandidates(plan, lesson, sourceCandidates)
+  const candidates = relevantCandidates.length > 0 ? relevantCandidates : sourceCandidates
 
   if (candidates.length === 0) {
     throw new Error('Không tìm được video YouTube phù hợp.')
@@ -101,8 +104,9 @@ export async function suggestYoutubeVideo(plan: LearningPlan, lesson: Lesson | n
 
 export async function suggestPlanWideYoutubeVideo(plan: LearningPlan): Promise<VideoRecommendation | null> {
   const languageLabel = plan.profile.videoLanguage === 'en' ? 'English' : 'Vietnamese'
-  const query = `${plan.profile.topic} complete course ${languageLabel} ${plan.profile.level}`
-  const candidates = await searchYoutubeCandidates(query, 10)
+  const languageHint = plan.profile.videoLanguage === 'en' ? 'complete course lecture' : 'khóa học đầy đủ bài giảng'
+  const query = `${plan.profile.topic} ${languageHint} ${languageLabel} ${plan.profile.level}`
+  const candidates = prioritizeRelevantVideoCandidates(plan, null, await searchYoutubeCandidates(query, 10))
   if (candidates.length === 0) return null
 
   const parsed = await lawRagChatJson(
@@ -110,7 +114,7 @@ export async function suggestPlanWideYoutubeVideo(plan: LearningPlan): Promise<V
       {
         role: 'system',
         content:
-          'Decide whether one YouTube video can cover the whole learning plan. Choose only from candidates. Return JSON {"useShared":true,"index":0,"reason":"..."} or {"useShared":false,"reason":"..."}. Prefer shared video only when it likely covers most weeks, not just the first lesson.'
+          'Decide whether one YouTube video can cover the whole learning plan. Choose only from candidates. Return JSON {"useShared":true,"index":0,"reason":"..."} or {"useShared":false,"reason":"..."}. Only use a shared video if its title/topic clearly matches learner.topic and likely covers most weeks. Reject unrelated domains, for example do not choose AI Agent for a Calculus/Giải tích plan.'
       },
       {
         role: 'user',
@@ -188,7 +192,14 @@ function filterRelevantVideoMatches(matches: VideoSearchMatch[]) {
 }
 
 function lessonQuery(lesson: Lesson) {
-  return [lesson.title, lesson.objective, lesson.checkpoint, ...lesson.activities, ...lesson.homework, ...lesson.resources, ...lesson.quiz].join('\n')
+  const resourceKeywords = (lesson.recommendedResources || []).flatMap((resource) => [
+    resource.searchKeyword,
+    ...resource.englishKeywords,
+    ...resource.vietnameseKeywords,
+    resource.whyRecommended,
+    resource.learningStyleFit
+  ])
+  return [lesson.title, lesson.objective, lesson.checkpoint, ...lesson.activities, ...lesson.homework, ...lesson.resources, ...resourceKeywords, ...lesson.quiz].join('\n')
 }
 
 async function getYoutubeInfo(url: string, language: VideoLanguage): Promise<YtDlpInfo> {
@@ -234,15 +245,17 @@ function titleChapterChunks(chunks: Array<TranscriptItem & { title?: string; sum
 
 async function buildVideoSearchQuery(plan: LearningPlan, lesson: Lesson | null) {
   const languageLabel = plan.profile.videoLanguage === 'en' ? 'English' : 'Vietnamese'
+  const strictTopic = lesson ? `${plan.profile.topic} ${lesson.title}` : `${plan.profile.topic} ${plan.profile.goal}`
+  const languageHint = plan.profile.videoLanguage === 'en' ? 'lecture tutorial' : 'bài giảng hướng dẫn'
   const fallback = lesson
-    ? `${plan.profile.topic} ${lesson.title} ${lesson.objective} ${plan.profile.level} ${languageLabel} tutorial`
-    : `${plan.profile.topic} ${plan.profile.goal} ${plan.profile.level} ${languageLabel} tutorial`
+    ? `${strictTopic} ${languageHint} ${plan.profile.level}`
+    : `${strictTopic} ${languageHint} ${plan.profile.level}`
   const parsed = await lawRagChatJson(
     [
       {
         role: 'system',
         content:
-          'Tạo một truy vấn YouTube ngắn, cụ thể cho đúng bài học hiện tại. Trả về JSON {"query":"..."}. Query phải có chủ đề chính, trình độ, trọng tâm riêng của lesson, và từ khóa tutorial/lesson nếu phù hợp. Tránh query quá rộng kiểu complete course/full course nếu đang tìm video cho một tuần cụ thể. Không trả URL.'
+          'Tạo một truy vấn YouTube ngắn, cụ thể cho đúng bài học hiện tại. Trả về JSON {"query":"..."}. Query BẮT BUỘC chứa chủ đề học chính và trọng tâm riêng của lesson. Không thêm chủ đề khác không có trong learner.topic/lesson, ví dụ không được thêm "AI Agent" nếu topic là Giải tích. Tránh query quá rộng kiểu complete course/full course nếu đang tìm video cho một tuần cụ thể. Không trả URL.'
       },
       {
         role: 'user',
@@ -273,7 +286,8 @@ async function buildVideoSearchQuery(plan: LearningPlan, lesson: Lesson | null) 
   )
 
   const query = parsed && typeof (parsed as { query?: unknown }).query === 'string' ? (parsed as { query: string }).query.trim() : ''
-  return query || fallback
+  const safeQuery = query && isQueryRelevantToLesson(query, plan, lesson) ? query : fallback
+  return safeQuery
 }
 
 async function searchYoutubeCandidates(query: string, limit = 8): Promise<Array<YtDlpInfo & { reason?: string }>> {
@@ -309,7 +323,7 @@ async function pickVideoCandidate(
       {
         role: 'system',
         content:
-          'Chọn đúng 1 video YouTube phù hợp nhất cho lesson hiện tại từ danh sách ứng viên. Chỉ chọn theo index có sẵn, không bịa URL. Ưu tiên video giáo dục rõ ràng, đúng trọng tâm riêng của lesson, đúng trình độ, thời lượng hợp lý, có khả năng có transcript/caption. Tránh chọn video quá tổng quát hoặc full course nếu lesson chỉ cần một chủ đề hẹp. Trả về JSON {"index":0,"reason":"..."} bằng tiếng Việt.'
+          'Chọn đúng 1 video YouTube phù hợp nhất cho lesson hiện tại từ danh sách ứng viên. Chỉ chọn theo index có sẵn, không bịa URL. BẮT BUỘC loại video có title/chủ đề lệch khỏi learner.topic hoặc lesson, ví dụ topic Giải tích thì không chọn AI Agent. Ưu tiên video giáo dục rõ ràng, đúng trọng tâm riêng của lesson, đúng trình độ, thời lượng hợp lý, có khả năng có transcript/caption. Tránh chọn video quá tổng quát hoặc full course nếu lesson chỉ cần một chủ đề hẹp. Trả về JSON {"index":0,"reason":"..."} bằng tiếng Việt.'
       },
       {
         role: 'user',
@@ -357,12 +371,55 @@ async function pickVideoCandidate(
   return { ...candidate, reason }
 }
 
+function prioritizeRelevantVideoCandidates(plan: LearningPlan, lesson: Lesson | null, candidates: Array<YtDlpInfo & { reason?: string }>) {
+  const scored = candidates
+    .map((candidate) => ({
+      candidate,
+      score: videoCandidateRelevanceScore(plan, lesson, candidate)
+    }))
+    .sort((left, right) => right.score - left.score)
+
+  const strong = scored.filter((item) => item.score >= 2).map((item) => item.candidate)
+  if (strong.length > 0) return strong
+
+  return scored.filter((item) => item.score > 0).map((item) => item.candidate)
+}
+
+function videoCandidateRelevanceScore(plan: LearningPlan, lesson: Lesson | null, candidate: YtDlpInfo) {
+  const titleTokens = new Set(tokenize([candidate.title || '', candidate.description || ''].join(' ')))
+  const topicTokens = importantSearchTokens(plan.profile.topic)
+  const lessonTokens = importantSearchTokens([lesson?.title || '', lesson?.objective || '', lesson?.checkpoint || ''].join(' '))
+  const topicHits = topicTokens.filter((token) => titleTokens.has(token)).length
+  const lessonHits = lessonTokens.filter((token) => titleTokens.has(token)).length
+  return topicHits * 2 + lessonHits
+}
+
+function isQueryRelevantToLesson(query: string, plan: LearningPlan, lesson: Lesson | null) {
+  const queryTokens = new Set(tokenize(query))
+  const topicTokens = importantSearchTokens(plan.profile.topic)
+  const lessonTokens = importantSearchTokens(lesson ? `${lesson.title} ${lesson.objective}` : plan.profile.goal)
+  return topicTokens.some((token) => queryTokens.has(token)) && (lessonTokens.length === 0 || lessonTokens.some((token) => queryTokens.has(token)))
+}
+
+function importantSearchTokens(value: string) {
+  const stopwords = new Set(['hoc', 'học', 'bai', 'bài', 'tuan', 'tuần', 'co', 'cơ', 'ban', 'bản', 'can', 'cần', 'nen', 'nền', 'tang', 'tảng', 'on', 'ôn', 'tap', 'tập', 'kien', 'kiến', 'thuc', 'thức', 'and', 'the', 'for', 'with', 'intro', 'tutorial', 'course'])
+  return Array.from(new Set(tokenize(value).filter((token) => token.length >= 2 && !stopwords.has(token)))).slice(0, 10)
+}
+
 async function getTranscript(info: YtDlpInfo, language: VideoLanguage): Promise<TranscriptItem[]> {
   const subtitleUrl = pickSubtitleUrl(info, language)
   if (!subtitleUrl) return []
 
-  const response = await fetch(subtitleUrl)
-  if (!response.ok) return []
+  const response = await fetch(subtitleUrl, {
+    headers: {
+      'user-agent': info.http_headers?.['User-Agent'] || 'Mozilla/5.0',
+      accept: info.http_headers?.Accept || '*/*',
+      'accept-language': info.http_headers?.['Accept-Language'] || (language === 'en' ? 'en-US,en;q=0.9' : 'vi,en-US;q=0.8,en;q=0.7')
+    }
+  })
+  if (!response.ok) {
+    return []
+  }
   const text = await response.text()
 
   try {
