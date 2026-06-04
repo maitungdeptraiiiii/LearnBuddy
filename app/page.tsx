@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
-import type { DragEvent, FormEvent, ReactNode } from 'react'
+import type { DragEvent, FormEvent, ReactNode, SetStateAction } from 'react'
 import {
   BookOpen,
   CalendarDays,
@@ -70,10 +70,25 @@ type ChatTopic = {
   lessons: Lesson[]
 }
 
+type SavedLearningPlan = LearningPlan & {
+  savedCopyId?: string
+}
+
+type TutorVideoReference = {
+  timestamp: string
+  title: string
+  summary: string
+  url: string
+  videoTitle: string
+  startSeconds: number
+  endSeconds: number
+  excerpt: string
+}
+
 type PersistedAppState = {
   profile: LearnerProfile
   plan: LearningPlan | null
-  savedPlans: LearningPlan[]
+  savedPlans: SavedLearningPlan[]
   selectedLessonId: string | null
   activeVideoLessonId: string | null
   youtubeUrlByLesson: Record<string, string>
@@ -99,21 +114,28 @@ export default function Home() {
   const [youtubeUrlByLesson, setYoutubeUrlByLesson] = useState<Record<string, string>>({})
   const [videoAnalysisByLesson, setVideoAnalysisByLesson] = useState<Record<string, VideoAnalysis>>({})
   const [videoRecommendationByLesson, setVideoRecommendationByLesson] = useState<Record<string, VideoRecommendation>>({})
-  const [isAnalyzingVideo, setIsAnalyzingVideo] = useState(false)
-  const [isSuggestingVideo, setIsSuggestingVideo] = useState(false)
+  const [videoStartByLesson, setVideoStartByLesson] = useState<Record<string, number>>({})
+  const [analyzingVideoByLesson, setAnalyzingVideoByLesson] = useState<Record<string, boolean>>({})
+  const [suggestingVideoByLesson, setSuggestingVideoByLesson] = useState<Record<string, boolean>>({})
   const [isProcessingVideoBatch, setIsProcessingVideoBatch] = useState(false)
-  const [videoBatchStatus, setVideoBatchStatus] = useState('')
-  const [videoError, setVideoError] = useState('')
+  const [videoStatusByLesson, setVideoStatusByLesson] = useState<Record<string, string>>({})
+  const [videoErrorByLesson, setVideoErrorByLesson] = useState<Record<string, string>>({})
   const [activeChatTopicId, setActiveChatTopicId] = useState<string | null>(null)
   const [activeChatLessonId, setActiveChatLessonId] = useState<string | null>(null)
   const [chatTopics, setChatTopics] = useState<ChatTopic[]>([])
   const [chatHistoryByLesson, setChatHistoryByLesson] = useState<ChatHistoryByLesson>({})
   const [question, setQuestion] = useState('')
+  const [videoQuestion, setVideoQuestion] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isAsking, setIsAsking] = useState(false)
-  const [savedPlans, setSavedPlans] = useState<LearningPlan[]>([])
+  const [savedPlans, setSavedPlans] = useState<SavedLearningPlan[]>([])
+  const [duplicatePlanDraft, setDuplicatePlanDraft] = useState<LearningPlan | null>(null)
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
   const autoSuggestedVideoKeysRef = useRef<Set<string>>(new Set())
+  const chatLogRef = useRef<HTMLDivElement | null>(null)
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
+  const videoChatLogRef = useRef<HTMLDivElement | null>(null)
+  const videoChatEndRef = useRef<HTMLDivElement | null>(null)
 
   const selectedLesson = useMemo(
     () => plan?.lessons.find((lesson) => lesson.id === selectedLessonId) || plan?.lessons[0] || null,
@@ -133,10 +155,18 @@ export default function Home() {
   const youtubeUrl = activeVideoLessonIdKey ? youtubeUrlByLesson[activeVideoLessonIdKey] || '' : ''
   const videoAnalysis = activeVideoLessonIdKey ? videoAnalysisByLesson[activeVideoLessonIdKey] || null : null
   const videoRecommendation = activeVideoLessonIdKey ? videoRecommendationByLesson[activeVideoLessonIdKey] || null : null
+  const activeVideoStart = activeVideoLessonIdKey ? videoStartByLesson[activeVideoLessonIdKey] || 0 : 0
+  const activeVideoEmbedUrl = youtubeEmbedUrl(videoAnalysis?.video.url || videoRecommendation?.url || youtubeUrl, activeVideoStart)
+  const isAnalyzingActiveVideo = activeVideoLessonIdKey ? Boolean(analyzingVideoByLesson[activeVideoLessonIdKey]) : false
+  const isSuggestingActiveVideo = activeVideoLessonIdKey ? Boolean(suggestingVideoByLesson[activeVideoLessonIdKey]) : false
+  const activeVideoStatus = activeVideoLessonIdKey ? videoStatusByLesson[activeVideoLessonIdKey] || '' : ''
+  const activeVideoError = activeVideoLessonIdKey ? videoErrorByLesson[activeVideoLessonIdKey] || '' : ''
   const activeVideoMatches = activeVideoLesson && videoAnalysis && plan ? selectDistinctVideoMatches(plan.lessons, videoAnalysis, activeVideoLesson.id) : []
   const visibleScheduleEvents = scheduleEvents.filter((event) => event.week === activeScheduleWeek)
   const messages = selectedChatLesson ? chatHistoryByLesson[selectedChatLesson.id] || [] : []
+  const videoMessages = activeVideoLesson ? chatHistoryByLesson[activeVideoLesson.id] || [] : []
   const chatMessageCount = messages.filter((message) => !isLessonSupportMessage(message)).length
+  const videoChatMessageCount = videoMessages.filter((message) => !isLessonSupportMessage(message)).length
   const savedTopicOptions = chatTopics
     .filter((topic) => {
       const query = profile.topic.trim()
@@ -224,6 +254,35 @@ export default function Home() {
     void suggestAndAnalyzeAllVideos(plan)
   }, [hasLoadedStorage, plan])
 
+  useEffect(() => {
+    if (view !== 'chat' || !selectedChatLesson) return
+
+    const frame = requestAnimationFrame(() => {
+      chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      chatLogRef.current?.scrollTo({ top: chatLogRef.current.scrollHeight, behavior: 'smooth' })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [view, selectedChatLesson, messages.length, isAsking])
+
+  useEffect(() => {
+    if (view !== 'videos' || !plan || !activeVideoLesson) return
+    const topic = buildChatTopic(plan)
+    setChatTopics((current) => upsertChatTopic(current, topic))
+    ensureLessonChat(activeVideoLesson)
+  }, [view, plan, activeVideoLesson])
+
+  useEffect(() => {
+    if (view !== 'videos' || !activeVideoLesson) return
+
+    const frame = requestAnimationFrame(() => {
+      videoChatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+      videoChatLogRef.current?.scrollTo({ top: videoChatLogRef.current.scrollHeight, behavior: 'smooth' })
+    })
+
+    return () => cancelAnimationFrame(frame)
+  }, [view, activeVideoLesson, videoMessages.length, isAsking])
+
   async function generatePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setIsGenerating(true)
@@ -235,24 +294,43 @@ export default function Home() {
     })
     const payload = await response.json()
     const nextPlan = normalizeLoadedPlan(payload.plan as LearningPlan)
-    const firstLesson = nextPlan.lessons[0] || null
-    const nextTopic = buildChatTopic(nextPlan)
 
-    setPlan(nextPlan)
-    setSavedPlans((current) => upsertSavedPlan(current, nextPlan))
+    if (findSavedPlanByName(savedPlans, nextPlan.profile.topic)) {
+      setDuplicatePlanDraft(nextPlan)
+      setIsGenerating(false)
+      return
+    }
+
+    applyGeneratedPlan(nextPlan, 'save')
+    setIsGenerating(false)
+  }
+
+  function applyGeneratedPlan(nextPlan: LearningPlan, saveMode: 'save' | 'keep-both' | 'replace') {
+    const planToApply = saveMode === 'keep-both' ? withSavedCopyId(nextPlan) : normalizeLoadedPlan(nextPlan)
+    const firstLesson = planToApply.lessons[0] || null
+    const nextTopic = buildChatTopic(planToApply)
+
+    setPlan(planToApply)
+    setSavedPlans((current) => {
+      if (saveMode === 'replace') return upsertSavedPlan(removeSavedPlansByName(current, planToApply.profile.topic), planToApply)
+      return upsertSavedPlan(current, planToApply)
+    })
     setSelectedLessonId(firstLesson?.id || null)
     setActiveVideoLessonId(firstLesson?.id || null)
-    clearVideoStateForPlan(nextPlan)
-    setVideoError('')
+    clearVideoStateForPlan(planToApply)
     setActiveScheduleWeek(firstLesson?.week || 1)
-    setScheduleEvents(buildInitialSchedule(nextPlan.lessons, nextPlan.profile.learningTimePreference))
+    setScheduleEvents(buildInitialSchedule(planToApply.lessons, planToApply.profile.learningTimePreference))
     setActiveChatTopicId(nextTopic.id)
     setActiveChatLessonId(firstLesson?.id || null)
     setChatTopics((current) => upsertChatTopic(current, nextTopic))
     if (firstLesson) ensureLessonChat(firstLesson)
+    setDuplicatePlanDraft(null)
     setView('plan')
-    setIsGenerating(false)
-    void suggestAndAnalyzeAllVideos(nextPlan)
+    void suggestAndAnalyzeAllVideos(planToApply)
+  }
+
+  function cancelDuplicatePlanDraft() {
+    setDuplicatePlanDraft(null)
   }
 
   function selectLesson(lessonId: string) {
@@ -299,22 +377,44 @@ export default function Home() {
   }
 
   async function sendTutorQuestion(rawQuestion: string) {
-    const trimmed = rawQuestion.trim()
-    if (!trimmed || !selectedChatTopic || !selectedChatLesson) return
+    if (!selectedChatTopic || !selectedChatLesson) return
+    await sendTutorQuestionForLesson(rawQuestion, selectedChatTopic, selectedChatLesson, () => setQuestion(''))
+  }
 
-    const lessonId = selectedChatLesson.id
-    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(selectedChatLesson)]
+  async function sendVideoTutorQuestion(rawQuestion: string) {
+    if (!plan || !activeVideoLesson) return
+    const topic = buildChatTopic(plan)
+    setChatTopics((current) => upsertChatTopic(current, topic))
+    setActiveChatTopicId(topic.id)
+    setActiveChatLessonId(activeVideoLesson.id)
+    ensureLessonChat(activeVideoLesson)
+    await sendTutorQuestionForLesson(rawQuestion, topic, activeVideoLesson, () => setVideoQuestion(''))
+  }
+
+  async function sendTutorQuestionForLesson(rawQuestion: string, topic: ChatTopic, lesson: Lesson, clearInput: () => void) {
+    const trimmed = rawQuestion.trim()
+    if (!trimmed) return
+
+    const lessonId = lesson.id
+    const currentMessages = chatHistoryByLesson[lessonId] || [buildLessonSupportMessage(lesson)]
+    const videoReferences = buildTutorVideoReferences(trimmed, lesson, topic, videoAnalysisByLesson)
     const userMessage: ChatMessage = { id: crypto.randomUUID(), role: 'user', content: trimmed }
     const nextMessages = [...currentMessages, userMessage]
     setChatHistoryByLesson((current) => ({ ...current, [lessonId]: nextMessages }))
-    setQuestion('')
+    clearInput()
     setIsAsking(true)
 
     try {
       const response = await fetch('/api/tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: trimmed, plan: plan || topicToPlan(selectedChatTopic), lesson: selectedChatLesson, history: currentMessages.slice(-6) })
+        body: JSON.stringify({
+          question: trimmed,
+          plan: plan || topicToPlan(topic),
+          lesson,
+          history: currentMessages.slice(-6),
+          videoReferences
+        })
       })
       const payload = await response.json()
       setChatHistoryByLesson((current) => ({
@@ -339,17 +439,32 @@ export default function Home() {
     await sendTutorQuestion(question)
   }
 
+  async function askVideoTutor(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    await sendVideoTutorQuestion(videoQuestion)
+  }
+
   async function analyzeVideo(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     await analyzeVideoUrl(youtubeUrl)
+  }
+
+  function excludedVideoUrlsForLesson(lessonId: string) {
+    return Object.entries(youtubeUrlByLesson)
+      .filter(([currentLessonId, url]) => currentLessonId !== lessonId && Boolean(url.trim()))
+      .map(([, url]) => normalizeVideoUrlForComparison(url))
+  }
+
+  function playVideoAt(lessonId: string, startSeconds: number) {
+    setVideoStartByLesson((current) => ({ ...current, [lessonId]: Math.max(0, Math.floor(startSeconds)) }))
   }
 
   async function analyzeVideoUrl(url: string, sourcePlan = plan, sourceLesson = activeVideoLesson) {
     const lesson = sourceLesson || sourcePlan?.lessons.find((item) => item.id === activeVideoLessonId) || sourcePlan?.lessons[0] || null
     if (!url.trim() || !sourcePlan || !lesson) return
 
-    setIsAnalyzingVideo(true)
-    setVideoError('')
+    setLessonFlag(setAnalyzingVideoByLesson, lesson.id, true)
+    setLessonMessage(setVideoErrorByLesson, lesson.id, '')
 
     const response = await fetch('/api/videos/analyze', {
       method: 'POST',
@@ -360,68 +475,69 @@ export default function Home() {
 
     if (!response.ok) {
       setVideoAnalysisByLesson((current) => omitRecordKey(current, lesson.id))
-      setVideoError(payload.error || 'Không phân tích được video.')
+      setLessonMessage(setVideoErrorByLesson, lesson.id, payload.error || 'Không phân tích được video.')
     } else {
       setVideoAnalysisByLesson((current) => ({ ...current, [lesson.id]: payload.analysis as VideoAnalysis }))
-      setVideoError('')
+      setLessonMessage(setVideoErrorByLesson, lesson.id, '')
     }
 
-    setIsAnalyzingVideo(false)
+    setLessonFlag(setAnalyzingVideoByLesson, lesson.id, false)
   }
 
-  async function suggestAndAnalyzeVideo(sourcePlan = plan, sourceLesson = activeVideoLesson, force = false) {
-    if (!sourcePlan) return
-    if (!sourceLesson) return
+  async function suggestAndAnalyzeVideo(sourcePlan = plan, sourceLesson = activeVideoLesson, force = false, excludedUrls: string[] = []) {
+    if (!sourcePlan) return null
+    if (!sourceLesson) return null
 
     const autoSuggestKey = videoJobKey(sourcePlan, sourceLesson)
-    if (!force && (videoAnalysisByLesson[sourceLesson.id] || autoSuggestedVideoKeysRef.current.has(autoSuggestKey))) return
+    if (!force && (videoAnalysisByLesson[sourceLesson.id] || autoSuggestedVideoKeysRef.current.has(autoSuggestKey))) return null
     autoSuggestedVideoKeysRef.current.add(autoSuggestKey)
 
-    setIsSuggestingVideo(true)
-    setVideoError('')
+    setLessonFlag(setSuggestingVideoByLesson, sourceLesson.id, true)
+    setLessonMessage(setVideoErrorByLesson, sourceLesson.id, '')
 
     const response = await fetch('/api/videos/suggest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan: sourcePlan, lesson: sourceLesson })
+      body: JSON.stringify({ plan: sourcePlan, lesson: sourceLesson, excludedUrls })
     })
     const payload = await response.json()
 
     if (!response.ok) {
       setVideoRecommendationByLesson((current) => omitRecordKey(current, sourceLesson.id))
-      setVideoError(payload.error || 'Không gợi ý được video.')
-      setIsSuggestingVideo(false)
-      return
+      setLessonMessage(setVideoErrorByLesson, sourceLesson.id, payload.error || 'Không gợi ý được video.')
+      setLessonFlag(setSuggestingVideoByLesson, sourceLesson.id, false)
+      return null
     }
 
     const recommendation = payload.recommendation as VideoRecommendation
     setVideoRecommendationByLesson((current) => ({ ...current, [sourceLesson.id]: recommendation }))
     setYoutubeUrlByLesson((current) => ({ ...current, [sourceLesson.id]: recommendation.url }))
-    setIsSuggestingVideo(false)
+    setLessonFlag(setSuggestingVideoByLesson, sourceLesson.id, false)
     await analyzeVideoUrl(recommendation.url, sourcePlan, sourceLesson)
+    return recommendation
   }
 
   async function suggestAndAnalyzeAllVideos(sourcePlan = plan) {
     if (!sourcePlan || isProcessingVideoBatch) return
 
     setIsProcessingVideoBatch(true)
-    setVideoError('')
 
-    const sharedHandled = await suggestAndAnalyzeSharedVideo(sourcePlan)
-    if (sharedHandled) {
-      setVideoBatchStatus('')
-      setIsProcessingVideoBatch(false)
-      return
-    }
-
+    const usedUrls = new Set(
+      sourcePlan.lessons
+        .map((lesson) => videoRecommendationByLesson[lesson.id]?.url || youtubeUrlByLesson[lesson.id])
+        .filter((url): url is string => Boolean(url?.trim()))
+        .map(normalizeVideoUrlForComparison)
+    )
     for (const lesson of sourcePlan.lessons) {
       const key = videoJobKey(sourcePlan, lesson)
       if (videoAnalysisByLesson[lesson.id] || autoSuggestedVideoKeysRef.current.has(key)) continue
-      setVideoBatchStatus(`Đang gợi ý video tuần ${lesson.week}/${sourcePlan.lessons.length}`)
-      await suggestAndAnalyzeVideo(sourcePlan, lesson)
+      setLessonMessage(setVideoStatusByLesson, lesson.id, `Đang gợi ý video tuần ${lesson.week}/${sourcePlan.lessons.length}`)
+      const excludedUrls = Array.from(usedUrls)
+      const recommendation = await suggestAndAnalyzeVideo(sourcePlan, lesson, false, excludedUrls)
+      setLessonMessage(setVideoStatusByLesson, lesson.id, '')
+      if (recommendation?.url) usedUrls.add(normalizeVideoUrlForComparison(recommendation.url))
     }
 
-    setVideoBatchStatus('')
     setIsProcessingVideoBatch(false)
   }
 
@@ -431,7 +547,7 @@ export default function Home() {
     if (allLessonsAlreadyHaveVideo || autoSuggestedVideoKeysRef.current.has(sharedKey)) return false
 
     autoSuggestedVideoKeysRef.current.add(sharedKey)
-    setVideoBatchStatus('Đang tìm video tổng hợp cho toàn bộ lộ trình')
+    setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, 'Đang tìm video tổng hợp cho toàn bộ lộ trình')
 
     const suggestResponse = await fetch('/api/videos/suggest-shared', {
       method: 'POST',
@@ -442,7 +558,7 @@ export default function Home() {
     const recommendation = suggestResponse.ok ? (suggestPayload.recommendation as VideoRecommendation | null) : null
     if (!recommendation?.url) return false
 
-    setVideoBatchStatus('Đang phân tích video tổng hợp')
+    setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, 'Đang phân tích video tổng hợp')
     const analyzeResponse = await fetch('/api/videos/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -451,7 +567,8 @@ export default function Home() {
     const analyzePayload = await analyzeResponse.json()
 
     if (!analyzeResponse.ok) {
-      setVideoError(analyzePayload.error || 'Không phân tích được video tổng hợp.')
+      setLessonMessages(setVideoErrorByLesson, sourcePlan.lessons, analyzePayload.error || 'Không phân tích được video tổng hợp.')
+      setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, '')
       return false
     }
 
@@ -470,23 +587,28 @@ export default function Home() {
     setVideoAnalysisByLesson((current) => ({ ...current, ...nextAnalysis }))
     setVideoRecommendationByLesson((current) => ({ ...current, ...nextRecommendation }))
     setYoutubeUrlByLesson((current) => ({ ...current, ...nextUrls }))
-    setVideoError('')
+    setLessonMessages(setVideoErrorByLesson, sourcePlan.lessons, '')
+    setLessonMessages(setVideoStatusByLesson, sourcePlan.lessons, '')
     return true
   }
 
-  function addLessonToSchedule(lesson: Lesson) {
+  function addLessonToSchedule(lesson: Lesson, kind: ScheduleEvent['kind'] = 'study') {
     const start = preferredScheduleStart[plan?.profile.learningTimePreference || profile.learningTimePreference]
+    const duration = kind === 'study' ? Math.min(120, lesson.durationMinutes) : kind === 'practice' ? 60 : 30
+    const day = kind === 'study' ? 'Thứ 2' : kind === 'practice' ? 'Thứ 4' : 'Thứ 6'
+    const title = kind === 'study' ? lesson.title : kind === 'practice' ? `Thực hành: ${lesson.title}` : `Ôn + quiz: ${lesson.title}`
+
     setScheduleEvents((current) => [
       ...current,
       {
         id: crypto.randomUUID(),
         lessonId: lesson.id,
         week: lesson.week,
-        title: lesson.title,
-        day: 'Thứ 2',
+        title,
+        day,
         start,
-        end: addMinutesToTime(start, Math.min(120, lesson.durationMinutes)),
-        kind: 'study'
+        end: addMinutesToTime(start, duration),
+        kind
       }
     ])
     setActiveScheduleWeek(lesson.week)
@@ -545,6 +667,11 @@ export default function Home() {
     setYoutubeUrlByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setVideoAnalysisByLesson((current) => filterRecordByKeys(current, lessonIds, false))
     setVideoRecommendationByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setVideoStartByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setVideoErrorByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setVideoStatusByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setAnalyzingVideoByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setSuggestingVideoByLesson((current) => filterRecordByKeys(current, lessonIds, false))
   }
 
   function deleteSavedPlan(savedPlan: LearningPlan) {
@@ -570,7 +697,6 @@ export default function Home() {
     setSelectedLessonId(firstLesson?.id || null)
     setActiveVideoLessonId(firstLesson?.id || null)
     clearVideoStateForPlan(restoredPlan)
-    setVideoError('')
     setActiveScheduleWeek(firstLesson?.week || 1)
     setScheduleEvents(buildInitialSchedule(restoredPlan.lessons, restoredPlan.profile.learningTimePreference))
     setChatTopics((current) => upsertChatTopic(current, topic))
@@ -713,6 +839,24 @@ export default function Home() {
               Tạo lộ trình học
             </button>
 
+            {duplicatePlanDraft && (
+              <div className="duplicate-plan-warning" role="alert">
+                <strong>Đã có lộ trình tên "{duplicatePlanDraft.profile.topic}"</strong>
+                <p>Bạn muốn giữ cả hai bản, thay thế bản đã lưu, hay quay lại chỉnh thông tin?</p>
+                <div>
+                  <button type="button" onClick={() => applyGeneratedPlan(duplicatePlanDraft, 'keep-both')}>
+                    Giữ lại cả 2
+                  </button>
+                  <button type="button" onClick={() => applyGeneratedPlan(duplicatePlanDraft, 'replace')}>
+                    Thay thế
+                  </button>
+                  <button type="button" onClick={cancelDuplicatePlanDraft}>
+                    Quay lại
+                  </button>
+                </div>
+              </div>
+            )}
+
             {savedPlans.length > 0 && (
               <div className="saved-plan-list">
                 <strong>Lộ trình đã lưu</strong>
@@ -807,18 +951,21 @@ export default function Home() {
                     <option value="review">Cần ôn</option>
                   </select>
                 </div>
-                <p>{selectedLesson.checkpoint}</p>
-                <ul>
-                  {selectedLesson.activities.map((activity) => (
-                    <li key={activity}>{activity}</li>
-                  ))}
-                </ul>
-                <div className="quiz-list">
-                  <strong>Quiz nhanh</strong>
-                  {selectedLesson.quiz.map((item) => (
-                    <p key={item}>{item}</p>
-                  ))}
+
+                <div className="study-flow">
+                  <section className="study-flow-card">
+                    <div>
+                      <strong>Mục tiêu/checkpoint</strong>
+                      <button type="button" onClick={() => addLessonToSchedule(selectedLesson, 'study')}>
+                        <CalendarDays size={14} />
+                        Lịch học
+                      </button>
+                    </div>
+                    <p>{selectedLesson.checkpoint}</p>
+                  </section>
+
                 </div>
+
                 <div className="learning-assets">
                   <AssetList icon={<FileQuestion size={15} />} title="Bài tập về nhà" items={selectedLesson.homework} />
                   <AssetList icon={<Link size={15} />} title="Tài liệu học tập" items={selectedLesson.resources} />
@@ -979,25 +1126,80 @@ export default function Home() {
                     onChange={(event) => activeVideoLesson && setYoutubeUrlByLesson((current) => ({ ...current, [activeVideoLesson.id]: event.target.value }))}
                     placeholder="YouTube URL sẽ được LLM gợi ý, hoặc bạn có thể dán tay..."
                   />
-                  <button className="primary-button" type="submit" disabled={!plan || !youtubeUrl.trim() || isAnalyzingVideo}>
-                    {isAnalyzingVideo ? <Loader2 className="spin" size={18} /> : <PlaySquare size={18} />}
+                  <button className="primary-button" type="submit" disabled={!plan || !youtubeUrl.trim() || isAnalyzingActiveVideo}>
+                    {isAnalyzingActiveVideo ? <Loader2 className="spin" size={18} /> : <PlaySquare size={18} />}
                     Phân tích
                   </button>
                 </form>
 
-                <button className="secondary-button video-suggest-button" type="button" disabled={!plan || isSuggestingVideo || isAnalyzingVideo} onClick={() => suggestAndAnalyzeVideo()}>
-                  {isSuggestingVideo ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+                <button
+                  className="secondary-button video-suggest-button"
+                  type="button"
+                  disabled={!plan || !activeVideoLesson || isSuggestingActiveVideo || isAnalyzingActiveVideo}
+                  onClick={() => activeVideoLesson && suggestAndAnalyzeVideo(plan, activeVideoLesson, true, excludedVideoUrlsForLesson(activeVideoLesson.id))}
+                >
+                  {isSuggestingActiveVideo ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
                   Gợi ý video bằng LLM và phân tích
                 </button>
 
-                {isProcessingVideoBatch && (
+                {activeVideoStatus && (
                   <div className="video-processing">
                     <Loader2 className="spin" size={16} />
-                    {videoBatchStatus || 'Đang gợi ý video cho các tuần...'}
+                    {activeVideoStatus}
                   </div>
                 )}
 
-                {videoError && <div className="video-error">{videoError}</div>}
+                {activeVideoError && <div className="video-error">{activeVideoError}</div>}
+
+                <div className="video-study-grid">
+                  {activeVideoEmbedUrl ? (
+                    <div className="embedded-video">
+                      <iframe
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                        allowFullScreen
+                        key={activeVideoEmbedUrl}
+                        src={activeVideoEmbedUrl}
+                        title={videoAnalysis?.video.title || videoRecommendation?.title || activeVideoLesson.title}
+                      />
+                    </div>
+                  ) : (
+                    <div className="empty-state compact">Dán URL hoặc dùng LLM gợi ý để phát video trong trang.</div>
+                  )}
+
+                  <div className="video-tutor-panel">
+                    <div className="chat-history-heading">
+                      <div>
+                        <h3>AI tutor</h3>
+                        <p>{activeVideoLesson.title}</p>
+                      </div>
+                      <span>{videoChatMessageCount} tin nhắn</span>
+                    </div>
+                    <div className="chat-log video-chat-log" ref={videoChatLogRef}>
+                      {videoMessages.length === 0 ? (
+                        <div className="empty-state compact">Hỏi tutor trong lúc xem video.</div>
+                      ) : (
+                        videoMessages.map((message) => (
+                          <div key={message.id} className={`message ${message.role}`}>
+                            {message.role === 'assistant' ? <AssistantMessage content={message.content} /> : message.content}
+                          </div>
+                        ))
+                      )}
+                      {isAsking && activeChatLessonId === activeVideoLesson.id && (
+                        <div className="message assistant pending">
+                          <Loader2 className="spin" size={16} />
+                          Đang trả lời...
+                        </div>
+                      )}
+                      <div className="chat-scroll-anchor" ref={videoChatEndRef} />
+                    </div>
+                    <form className="chat-form video-chat-form" onSubmit={askVideoTutor}>
+                      <input value={videoQuestion} onChange={(event) => setVideoQuestion(event.target.value)} placeholder="Hỏi về đoạn video hoặc bài học này..." />
+                      <button type="submit" disabled={!activeVideoLesson || isAsking}>
+                        <CheckCircle2 size={18} />
+                      </button>
+                    </form>
+                  </div>
+                </div>
 
                 {videoRecommendation && (
                   <div className="video-recommendation">
@@ -1022,17 +1224,17 @@ export default function Home() {
                     <div className="timestamp-panel">
                       <div>
                         <strong>Đoạn phù hợp với bài đang học</strong>
-                        <a href={videoAnalysis.video.url} target="_blank" rel="noreferrer">Mở video</a>
+                        <span>Phát trực tiếp trong trang</span>
                       </div>
                       {activeVideoMatches.length > 0 ? (
                         activeVideoMatches.map((match) => (
-                          <a className="timestamp-link" href={match.url} key={match.id} target="_blank" rel="noreferrer">
+                          <button className="timestamp-link" key={match.id} type="button" onClick={() => playVideoAt(activeVideoLesson.id, match.startSeconds)}>
                             <strong>{secondsToTimestamp(match.startSeconds)}-{secondsToTimestamp(match.endSeconds)}</strong>
                             <span>
                               <b>{match.title}</b>
                               {match.summary || 'Mở timestamp để xem nội dung chính của đoạn này.'}
                             </span>
-                          </a>
+                          </button>
                         ))
                       ) : (
                         <p>Chưa tìm thấy đoạn đủ liên quan với bài này. Thử video khác hoặc đổi bài học ở sidebar.</p>
@@ -1135,7 +1337,7 @@ export default function Home() {
                   <span>{chatMessageCount} tin nhắn</span>
                 </div>
 
-                <div className="chat-log full">
+                <div className="chat-log full" ref={chatLogRef}>
                   {messages.length === 0 ? (
                     <div className="empty-state compact">Chưa có lịch sử chat cho bài học này.</div>
                   ) : (
@@ -1151,6 +1353,7 @@ export default function Home() {
                       Đang trả lời...
                     </div>
                   )}
+                  <div className="chat-scroll-anchor" ref={chatEndRef} />
                 </div>
 
                 <form className="chat-form" onSubmit={askTutor}>
@@ -1205,15 +1408,58 @@ function topicToPlan(topic: ChatTopic): LearningPlan {
   }
 }
 
-function upsertSavedPlan(current: LearningPlan[], nextPlan: LearningPlan) {
+function upsertSavedPlan(current: SavedLearningPlan[], nextPlan: LearningPlan): SavedLearningPlan[] {
   const normalized = normalizeLoadedPlan(nextPlan)
   return [normalized, ...current.filter((item) => planStorageId(item) !== planStorageId(normalized))].slice(0, 8)
+}
+
+function withSavedCopyId(plan: LearningPlan): SavedLearningPlan {
+  return { ...normalizeLoadedPlan(plan), savedCopyId: crypto.randomUUID() }
+}
+
+function findSavedPlanByName(savedPlans: SavedLearningPlan[], name: string) {
+  const normalizedName = normalizePlanName(name)
+  return savedPlans.find((savedPlan) => normalizePlanName(savedPlan.profile.topic) === normalizedName) || null
+}
+
+function removeSavedPlansByName(savedPlans: SavedLearningPlan[], name: string) {
+  const normalizedName = normalizePlanName(name)
+  return savedPlans.filter((savedPlan) => normalizePlanName(savedPlan.profile.topic) !== normalizedName)
+}
+
+function normalizePlanName(value: string) {
+  return value.trim().replace(/\s+/g, ' ').toLowerCase()
 }
 
 function omitRecordKey<T>(record: Record<string, T>, key: string) {
   const next = { ...record }
   delete next[key]
   return next
+}
+
+function setLessonFlag(setter: (value: SetStateAction<Record<string, boolean>>) => void, lessonId: string, value: boolean) {
+  setter((current) => {
+    if (value) return { ...current, [lessonId]: true }
+    return omitRecordKey(current, lessonId)
+  })
+}
+
+function setLessonMessage(setter: (value: SetStateAction<Record<string, string>>) => void, lessonId: string, value: string) {
+  setter((current) => {
+    if (value) return { ...current, [lessonId]: value }
+    return omitRecordKey(current, lessonId)
+  })
+}
+
+function setLessonMessages(setter: (value: SetStateAction<Record<string, string>>) => void, lessons: Lesson[], value: string) {
+  setter((current) => {
+    const next = { ...current }
+    for (const lesson of lessons) {
+      if (value) next[lesson.id] = value
+      else delete next[lesson.id]
+    }
+    return next
+  })
 }
 
 function filterRecordByKeys<T>(record: Record<string, T>, keys: Set<string>, keepMatching: boolean) {
@@ -1227,7 +1473,8 @@ function legacyLessonMap<T>(plan: LearningPlan | null, value: T | null | undefin
 }
 
 function planStorageId(plan: LearningPlan) {
-  return slugify(`${plan.profile.topic}-${plan.profile.goal}-${plan.profile.durationWeeks}-${plan.profile.videoLanguage}`)
+  const savedCopyId = (plan as SavedLearningPlan).savedCopyId
+  return slugify(`${plan.profile.topic}-${plan.profile.goal}-${plan.profile.durationWeeks}-${plan.profile.videoLanguage}-${savedCopyId || ''}`)
 }
 
 function videoJobKey(plan: LearningPlan, lesson: Lesson) {
@@ -1356,6 +1603,106 @@ function selectDistinctVideoMatches(lessons: Lesson[], analysis: VideoAnalysis, 
   }
 
   return []
+}
+
+function buildTutorVideoReferences(
+  question: string,
+  lesson: Lesson,
+  topic: ChatTopic,
+  analysisByLesson: Record<string, VideoAnalysis>
+): TutorVideoReference[] {
+  const analysis = analysisByLesson[lesson.id]
+  if (!analysis) return []
+
+  const lessonMatches = selectDistinctVideoMatches(topic.lessons, analysis, lesson.id)
+  const lessonFallbackMatches = analysis.matchesByLessonId[lesson.id] || []
+  const allVideoMatches = analysis.video.segments.map((segment) => ({
+    ...segment,
+    score: 0,
+    url: withYoutubeStartTime(analysis.video.url, segment.startSeconds),
+    videoTitle: analysis.video.title
+  }))
+  const matches = lessonMatches.length > 0 ? lessonMatches : lessonFallbackMatches.length > 0 ? lessonFallbackMatches : allVideoMatches
+
+  return matches
+    .map((match) => ({
+      match,
+      questionScore: scoreVideoReference(question, match)
+    }))
+    .sort((left, right) => right.questionScore - left.questionScore || right.match.score - left.match.score || left.match.startSeconds - right.match.startSeconds)
+    .slice(0, 3)
+    .map(({ match }) => ({
+      timestamp: `${secondsToTimestamp(match.startSeconds)}-${secondsToTimestamp(match.endSeconds)}`,
+      title: match.title,
+      summary: match.summary,
+      url: match.url,
+      videoTitle: match.videoTitle,
+      startSeconds: match.startSeconds,
+      endSeconds: match.endSeconds,
+      excerpt: match.text.slice(0, 700)
+    }))
+}
+
+function scoreVideoReference(question: string, match: VideoSearchMatch) {
+  const queryTokens = new Set(tokenizeSearchText(question))
+  if (queryTokens.size === 0) return 0
+
+  const targetTokens = tokenizeSearchText(`${match.title} ${match.summary} ${match.text}`)
+  return targetTokens.reduce((score, token) => score + (queryTokens.has(token) ? 1 : 0), 0)
+}
+
+function withYoutubeStartTime(value: string, seconds: number) {
+  const url = new URL(value)
+  url.searchParams.set('t', `${Math.floor(seconds)}s`)
+  return url.toString()
+}
+
+function youtubeEmbedUrl(value: string, startSeconds = 0) {
+  const videoId = youtubeVideoId(value)
+  if (!videoId) return ''
+
+  const url = new URL(`https://www.youtube-nocookie.com/embed/${videoId}`)
+  url.searchParams.set('rel', '0')
+  url.searchParams.set('modestbranding', '1')
+  if (startSeconds > 0) url.searchParams.set('start', String(Math.floor(startSeconds)))
+  return url.toString()
+}
+
+function youtubeVideoId(value: string) {
+  if (!value.trim()) return ''
+
+  try {
+    const url = new URL(value)
+    const host = url.hostname.replace(/^www\./, '')
+    if (host === 'youtu.be') return url.pathname.split('/').filter(Boolean)[0] || ''
+    if (host === 'youtube.com' || host === 'm.youtube.com' || host === 'music.youtube.com' || host === 'youtube-nocookie.com') {
+      if (url.pathname.startsWith('/embed/')) return url.pathname.split('/').filter(Boolean)[1] || ''
+      if (url.pathname.startsWith('/shorts/')) return url.pathname.split('/').filter(Boolean)[1] || ''
+      return url.searchParams.get('v') || ''
+    }
+  } catch {
+    return ''
+  }
+
+  return ''
+}
+
+function normalizeVideoUrlForComparison(value: string) {
+  try {
+    const url = new URL(value)
+    const host = url.hostname.replace(/^www\./, '')
+    const videoId = host === 'youtu.be' ? url.pathname.slice(1) : url.searchParams.get('v')
+    if (videoId) return `youtube:${videoId}`
+    url.search = ''
+    url.hash = ''
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return value.trim().toLowerCase()
+  }
+}
+
+function tokenizeSearchText(value: string) {
+  return normalizeSearchText(value).split(/\s+/).filter((token) => token.length >= 2)
 }
 
 function stableTopicId(profile: LearnerProfile) {
@@ -1616,9 +1963,17 @@ function cleanAssistantLine(line: string) {
 }
 
 function renderInlineMarkdown(text: string): ReactNode[] {
-  const parts = cleanAssistantLine(text).split(/(`[^`]+`|\*\*[^*]+\*\*)/g)
+  const parts = cleanAssistantLine(text).split(/(https?:\/\/[^\s)]+|`[^`]+`|\*\*[^*]+\*\*)/g)
 
   return parts.map((part, index) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a href={part} key={index} target="_blank" rel="noreferrer">
+          {part}
+        </a>
+      )
+    }
+
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={index}>{part.slice(2, -2)}</strong>
     }

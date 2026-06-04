@@ -253,6 +253,50 @@ label {
   font-size: 12px;
 }
 
+.duplicate-plan-warning {
+  background: #fff8e6;
+  border: 1px solid #e8c96b;
+  border-radius: 8px;
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+}
+
+.duplicate-plan-warning strong {
+  color: #6d4b00;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.duplicate-plan-warning p {
+  color: #6f5a25;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.duplicate-plan-warning div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.duplicate-plan-warning button {
+  background: #ffffff;
+  border: 1px solid #e2c566;
+  border-radius: 8px;
+  color: #573f05;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 8px;
+}
+
+.duplicate-plan-warning button:hover {
+  border-color: #9a7410;
+}
+
 input,
 select,
 textarea {
@@ -513,6 +557,71 @@ button:disabled {
   padding-left: 18px;
 }
 
+.study-flow {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.study-flow-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.study-flow-card.practice {
+  background: #eef0ed;
+}
+
+.study-flow-card.review {
+  background: #fff8ea;
+  border-color: #ecd8ad;
+}
+
+.study-flow-card > div {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.study-flow-card strong {
+  color: var(--primary-dark);
+  font-size: 13px;
+}
+
+.study-flow-card button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--primary-dark);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 5px;
+  padding: 6px 9px;
+}
+
+.study-flow-card button:hover {
+  border-color: var(--primary);
+}
+
+.study-flow-card p {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  margin: 0;
+  padding: 9px 10px;
+}
+
 .quiz-list {
   border-top: 1px solid var(--line);
   margin-top: 12px;
@@ -698,6 +807,10 @@ button:disabled {
   gap: 8px;
 }
 
+.chat-scroll-anchor {
+  height: 1px;
+}
+
 .assistant-message {
   display: grid;
   gap: 10px;
@@ -728,6 +841,13 @@ button:disabled {
 
 .assistant-message strong {
   color: #0f1a16;
+}
+
+.assistant-message a {
+  color: var(--primary-dark);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .assistant-message code {
@@ -1026,6 +1146,51 @@ button:disabled {
   width: fit-content;
 }
 
+.video-study-grid {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.75fr);
+}
+
+.embedded-video {
+  aspect-ratio: 16 / 9;
+  background: #0f1a16;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.embedded-video iframe {
+  border: 0;
+  display: block;
+  height: 100%;
+  width: 100%;
+}
+
+.video-tutor-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: clamp(360px, 31vw, 560px);
+  min-height: 0;
+  overflow: hidden;
+  padding: 12px;
+}
+
+.video-chat-log {
+  flex: initial;
+  min-height: 0;
+  overflow: auto;
+}
+
+.video-chat-form {
+  grid-template-columns: minmax(0, 1fr) 42px;
+}
+
 .video-processing {
   align-items: center;
   background: #eef0ed;
@@ -1177,11 +1342,18 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--muted);
+  cursor: pointer;
   display: flex;
   gap: 10px;
   line-height: 1.45;
   padding: 9px 10px;
+  text-align: left;
   text-decoration: none;
+  width: 100%;
+}
+
+.timestamp-link:hover {
+  border-color: var(--primary);
 }
 
 .timestamp-link strong {
@@ -1375,6 +1547,14 @@ button:disabled {
   .schedule-workspace,
   .video-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .video-study-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-tutor-panel {
+    height: 420px;
   }
 }
 

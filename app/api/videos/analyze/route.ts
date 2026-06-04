@@ -14,6 +14,14 @@ export async function POST(request: Request) {
     const analysis = await analyzeYoutubeVideo(url, body.lessons || [], body.language || 'vi')
     return NextResponse.json({ analysis })
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Không phân tích được video.' }, { status: 400 })
+    return NextResponse.json({ error: friendlyVideoError(error, 'Không phân tích được video.') }, { status: 400 })
   }
+}
+
+function friendlyVideoError(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : ''
+  if (/video is not available|This video is not available|youtube/i.test(message)) {
+    return 'Video này hiện không khả dụng hoặc không lấy được dữ liệu từ YouTube. Hãy thử video khác.'
+  }
+  return message ? message.split('\n')[0].slice(0, 220) : fallback
 }
