@@ -93,6 +93,10 @@ type ChatTopic = {
   profile: LearnerProfile
   lessons: Lesson[]
 }
+type DuplicatePlanPrompt = {
+  profile: LearnerProfile
+  existingPlan: LearningPlan
+}
 
 type PersistedAppState = {
   profile: LearnerProfile
@@ -169,6 +173,8 @@ export default function Home() {
   const [hasLoadedStorage, setHasLoadedStorage] = useState(false)
   const [isProfileEditorOpen, setIsProfileEditorOpen] = useState(false)
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
+  const [planDeleteCandidate, setPlanDeleteCandidate] = useState<LearningPlan | null>(null)
+  const [duplicatePlanPrompt, setDuplicatePlanPrompt] = useState<DuplicatePlanPrompt | null>(null)
   const [isTopicInputFocused, setIsTopicInputFocused] = useState(false)
   const [expandedScheduleTopicIds, setExpandedScheduleTopicIds] = useState<Record<string, boolean>>({})
   const [expandedVideoTopicIds, setExpandedVideoTopicIds] = useState<Record<string, boolean>>({})
@@ -202,7 +208,6 @@ export default function Home() {
     () => activeVideoPlan?.lessons.find((lesson) => lesson.id === activeVideoLessonId) || activeVideoPlan?.lessons[0] || null,
     [activeVideoPlan, activeVideoLessonId]
   )
-  const activeVideoLessonIdKey = activeVideoLesson?.id || ''
   const activeVideoStateKey = activeVideoPlan && activeVideoLesson ? videoStateKey(activeVideoPlan, activeVideoLesson) : ''
   const youtubeUrl = activeVideoPlan && activeVideoLesson ? getLessonScopedValue(youtubeUrlByLesson, activeVideoPlan, activeVideoLesson, '') : ''
   const videoAnalysis = activeVideoPlan && activeVideoLesson ? getLessonScopedValue<VideoAnalysis | null>(videoAnalysisByLesson, activeVideoPlan, activeVideoLesson, null) : null
@@ -211,11 +216,12 @@ export default function Home() {
   const activeQuizVideoMatches = activeVideoLesson && videoAnalysis ? buildQuizVideoMatches(videoAnalysis, activeVideoLesson.id, activeVideoMatches) : []
   const activeVideoStartSeconds = activeVideoStateKey ? videoPlayerStartByLesson[activeVideoStateKey] || 0 : 0
   const activeYoutubeEmbedUrl = videoAnalysis ? youtubeEmbedUrl(videoAnalysis.video.url, activeVideoStartSeconds) : ''
-  const activeQuiz = activeVideoLessonIdKey ? quizByLesson[activeVideoLessonIdKey] || null : null
-  const activeQuizAnswers = activeVideoLessonIdKey ? quizAnswersByLesson[activeVideoLessonIdKey] || {} : {}
+  const activeQuizKey = activeVideoStateKey
+  const activeQuiz = activeQuizKey ? quizByLesson[activeQuizKey] || null : null
+  const activeQuizAnswers = activeQuizKey ? quizAnswersByLesson[activeQuizKey] || {} : {}
   const activeQuizResult = useMemo(() => (activeQuiz ? buildQuizResult(activeQuiz, activeQuizAnswers) : null), [activeQuiz, activeQuizAnswers])
-  const isActiveQuizStarted = activeQuizSessionLessonId === activeVideoLessonIdKey
-  const isActiveQuizSubmitted = activeVideoLessonIdKey ? Boolean(quizSubmittedByLesson[activeVideoLessonIdKey]) : false
+  const isActiveQuizStarted = Boolean(activeQuizKey && activeQuizSessionLessonId === activeQuizKey)
+  const isActiveQuizSubmitted = activeQuizKey ? Boolean(quizSubmittedByLesson[activeQuizKey]) : false
   const canCompleteActiveQuiz = Boolean(activeQuiz && activeQuizResult && activeQuizResult.answeredCount === activeQuizResult.totalQuestions)
   const scheduleLessons = schedulePlans.flatMap((item) =>
     item.lessons.map((lesson) => ({
@@ -412,6 +418,16 @@ export default function Home() {
     }
 
     setProfileError('')
+    const duplicatePlan = !editingPlanId ? findDuplicateSavedPlanByTopic(savedPlans, cleanTopic) : null
+    if (duplicatePlan) {
+      setDuplicatePlanPrompt({ profile: nextProfile, existingPlan: duplicatePlan })
+      return
+    }
+
+    await createPlanFromProfile(nextProfile)
+  }
+
+  async function createPlanFromProfile(nextProfile: LearnerProfile, options: { replacePlan?: LearningPlan; keepDuplicate?: boolean } = {}) {
     setIsGenerating(true)
 
     try {
@@ -427,11 +443,13 @@ export default function Home() {
         return
       }
 
-      const nextPlan = normalizeLoadedPlan(payload.plan)
+      const generatedPlan = normalizeLoadedPlan(payload.plan)
+      const nextPlan = options.keepDuplicate ? withUniquePlanStorageId(generatedPlan) : generatedPlan
       const firstLesson = nextPlan.lessons[0] || null
       const nextTopic = buildChatTopic(nextPlan)
-      const previousPlan = editingPlanId ? savedPlans.find((item) => planStorageId(item) === editingPlanId) || (plan && planStorageId(plan) === editingPlanId ? plan : null) : null
-      const nextSavedPlans = upsertSavedPlan(previousPlan ? savedPlans.filter((item) => planStorageId(item) !== editingPlanId) : savedPlans, nextPlan)
+      const previousPlan = options.replacePlan || (editingPlanId ? savedPlans.find((item) => planStorageId(item) === editingPlanId) || (plan && planStorageId(plan) === editingPlanId ? plan : null) : null)
+      const previousPlanId = previousPlan ? planStorageId(previousPlan) : editingPlanId
+      const nextSavedPlans = upsertSavedPlan(previousPlan ? savedPlans.filter((item) => planStorageId(item) !== previousPlanId) : savedPlans, nextPlan)
       const nextPlanId = planStorageId(nextPlan)
 
       if (previousPlan) {
@@ -442,8 +460,8 @@ export default function Home() {
         setChatHistoryByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
         setChatSessionsByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
         setActiveChatSessionIdByLesson((current) => filterRecordByKeys(current, deletedLessonIds, false))
-        setExpandedScheduleTopicIds((current) => omitRecordKey(current, editingPlanId || ''))
-        setExpandedVideoTopicIds((current) => omitRecordKey(current, editingPlanId || ''))
+        setExpandedScheduleTopicIds((current) => omitRecordKey(current, previousPlanId || ''))
+        setExpandedVideoTopicIds((current) => omitRecordKey(current, previousPlanId || ''))
         setExpandedChatTopicIds((current) => omitRecordKey(current, deletedTopicId))
       }
 
@@ -463,6 +481,7 @@ export default function Home() {
       setExpandedVideoTopicIds((current) => ({ ...current, [nextPlanId]: true }))
       setExpandedChatTopicIds((current) => ({ ...current, [nextTopic.id]: true }))
       setEditingPlanId(null)
+      setDuplicatePlanPrompt(null)
       setIsProfileEditorOpen(false)
       setProfile(blankProfile)
       setIsTopicInputFocused(false)
@@ -474,6 +493,21 @@ export default function Home() {
     } finally {
       setIsGenerating(false)
     }
+  }
+
+  function keepDuplicatePlan() {
+    if (!duplicatePlanPrompt) return
+    void createPlanFromProfile(duplicatePlanPrompt.profile, { keepDuplicate: true })
+  }
+
+  function replaceDuplicatePlan() {
+    if (!duplicatePlanPrompt) return
+    void createPlanFromProfile(duplicatePlanPrompt.profile, { replacePlan: duplicatePlanPrompt.existingPlan })
+  }
+
+  function cancelDuplicatePlanPrompt() {
+    setDuplicatePlanPrompt(null)
+    setProfileError('')
   }
 
   async function enrichPlanResourceLinks(sourcePlan: LearningPlan) {
@@ -549,19 +583,20 @@ export default function Home() {
 
   async function requestLessonCompletion(lesson: Lesson) {
     if (!plan || isQuizInProgress) return
+    const scopedKey = videoStateKey(plan, lesson)
     setSelectedLessonId(lesson.id)
     setActiveVideoPlanId(planStorageId(plan))
     setActiveVideoLessonId(lesson.id)
     setView('quiz')
 
-    if (!quizByLesson[lesson.id]) {
+    if (!quizByLesson[scopedKey]) {
       const didCreateQuiz = await generateLessonQuiz(lesson)
       if (!didCreateQuiz) return
     }
 
-    setQuizAnswersByLesson((current) => ({ ...current, [lesson.id]: {} }))
-    setQuizSubmittedByLesson((current) => ({ ...current, [lesson.id]: false }))
-    setActiveQuizSessionLessonId(lesson.id)
+    setQuizAnswersByLesson((current) => ({ ...current, [scopedKey]: {} }))
+    setQuizSubmittedByLesson((current) => ({ ...current, [scopedKey]: false }))
+    setActiveQuizSessionLessonId(scopedKey)
   }
 
   function ensureLessonChat(lesson: Lesson) {
@@ -807,6 +842,7 @@ export default function Home() {
   async function generateLessonQuiz(sourceLesson = activeVideoLesson) {
     const sourcePlan = activeVideoPlan || plan
     if (!sourcePlan || !sourceLesson) return false
+    const quizKey = videoStateKey(sourcePlan, sourceLesson)
 
     setIsGeneratingQuiz(true)
     setVideoError('')
@@ -817,7 +853,7 @@ export default function Home() {
       body: JSON.stringify({
         plan: sourcePlan,
         lesson: sourceLesson,
-        matches: sourceLesson.id === activeVideoLesson?.id ? activeQuizVideoMatches : []
+        matches: quizKey === activeVideoStateKey ? activeQuizVideoMatches : []
       })
     })
     const payload = await response.json()
@@ -828,9 +864,9 @@ export default function Home() {
       return false
     } else {
       const quiz = payload.quiz as LessonQuiz
-      setQuizByLesson((current) => ({ ...current, [sourceLesson.id]: quiz }))
-      setQuizAnswersByLesson((current) => ({ ...current, [sourceLesson.id]: {} }))
-      setQuizSubmittedByLesson((current) => ({ ...current, [sourceLesson.id]: false }))
+      setQuizByLesson((current) => ({ ...current, [quizKey]: quiz }))
+      setQuizAnswersByLesson((current) => ({ ...current, [quizKey]: {} }))
+      setQuizSubmittedByLesson((current) => ({ ...current, [quizKey]: false }))
       setActiveQuizSessionLessonId(null)
       setVideoError('')
     }
@@ -840,15 +876,15 @@ export default function Home() {
   }
 
   function startActiveQuiz() {
-    if (!activeVideoLesson || !activeQuiz) return
-    setQuizAnswersByLesson((current) => ({ ...current, [activeVideoLesson.id]: {} }))
-    setQuizSubmittedByLesson((current) => ({ ...current, [activeVideoLesson.id]: false }))
-    setActiveQuizSessionLessonId(activeVideoLesson.id)
+    if (!activeVideoLesson || !activeQuiz || !activeQuizKey) return
+    setQuizAnswersByLesson((current) => ({ ...current, [activeQuizKey]: {} }))
+    setQuizSubmittedByLesson((current) => ({ ...current, [activeQuizKey]: false }))
+    setActiveQuizSessionLessonId(activeQuizKey)
   }
 
   function completeActiveQuiz() {
-    if (!activeVideoLesson || !activeQuiz || !canCompleteActiveQuiz) return
-    setQuizSubmittedByLesson((current) => ({ ...current, [activeVideoLesson.id]: true }))
+    if (!activeVideoLesson || !activeQuiz || !activeQuizKey || !canCompleteActiveQuiz) return
+    setQuizSubmittedByLesson((current) => ({ ...current, [activeQuizKey]: true }))
     setActiveQuizSessionLessonId(null)
     if (canPassActiveQuiz) {
       updateLessonStatus(activeVideoLesson.id, 'done')
@@ -856,7 +892,7 @@ export default function Home() {
   }
 
   function chooseQuizAnswer(questionId: string, optionIndex: number) {
-    if (!activeVideoLesson || !activeQuiz || !isActiveQuizStarted || isActiveQuizSubmitted) return
+    if (!activeVideoLesson || !activeQuiz || !activeQuizKey || !isActiveQuizStarted || isActiveQuizSubmitted) return
     if (typeof activeQuizAnswers[questionId] === 'number') return
     const nextLessonAnswers = {
       ...activeQuizAnswers,
@@ -865,7 +901,7 @@ export default function Home() {
 
     setQuizAnswersByLesson((current) => ({
       ...current,
-      [activeVideoLesson.id]: nextLessonAnswers
+      [activeQuizKey]: nextLessonAnswers
     }))
   }
 
@@ -962,12 +998,15 @@ export default function Home() {
 
   function toggleQuizTopic(sourcePlan: LearningPlan) {
     const sourcePlanId = planStorageId(sourcePlan)
+    if (isQuizInProgress && activeQuizSessionLessonId && !activeQuizSessionLessonId.startsWith(`${sourcePlanId}:`)) return
     setActiveVideoPlanId(sourcePlanId)
     setActiveVideoLessonId((current) => sourcePlan.lessons.some((lesson) => lesson.id === current) ? current : sourcePlan.lessons[0]?.id || null)
     setExpandedQuizTopicIds((current) => ({ ...current, [sourcePlanId]: !current[sourcePlanId] }))
   }
 
   function selectQuizLesson(sourcePlan: LearningPlan, lesson: Lesson) {
+    const targetKey = videoStateKey(sourcePlan, lesson)
+    if (isQuizInProgress && activeQuizSessionLessonId !== targetKey) return
     setActiveVideoPlanId(planStorageId(sourcePlan))
     setActiveVideoLessonId(lesson.id)
     setExpandedQuizTopicIds((current) => ({ ...current, [planStorageId(sourcePlan)]: true }))
@@ -1216,9 +1255,9 @@ export default function Home() {
     setYoutubeUrlByLesson((current) => filterRecordByPrefix(current, prefix, false))
     setVideoAnalysisByLesson((current) => filterRecordByPrefix(current, prefix, false))
     setVideoRecommendationByLesson((current) => filterRecordByPrefix(current, prefix, false))
-    setQuizByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setQuizAnswersByLesson((current) => filterRecordByKeys(current, lessonIds, false))
-    setQuizSubmittedByLesson((current) => filterRecordByKeys(current, lessonIds, false))
+    setQuizByLesson((current) => filterRecordByKeys(filterRecordByPrefix(current, prefix, false), lessonIds, false))
+    setQuizAnswersByLesson((current) => filterRecordByKeys(filterRecordByPrefix(current, prefix, false), lessonIds, false))
+    setQuizSubmittedByLesson((current) => filterRecordByKeys(filterRecordByPrefix(current, prefix, false), lessonIds, false))
     setActiveQuizSessionLessonId(null)
   }
 
@@ -1249,6 +1288,12 @@ export default function Home() {
     setActiveVideoLessonId(nextSavedPlans[0]?.lessons[0]?.id || null)
     setScheduleEvents(buildParallelSchedule(nextSavedPlans))
     setActiveScheduleWeek(1)
+  }
+
+  function confirmDeleteSavedPlan() {
+    if (!planDeleteCandidate) return
+    deleteSavedPlan(planDeleteCandidate)
+    setPlanDeleteCandidate(null)
   }
 
   function applySavedPlan(savedPlan: LearningPlan) {
@@ -1287,7 +1332,6 @@ export default function Home() {
         <div className="topbar-copy">
           <p className="eyebrow">LearnMate Demo</p>
           <h1>Lộ trình học cá nhân hóa</h1>
-          <p className="topbar-description">Tổ chức lộ trình theo tuần, tập trung vào bài học tiếp theo và giảm bớt thông tin không cần thiết trên cùng một màn hình.</p>
         </div>
         <div className="top-actions">
           <div className="view-switch">
@@ -1483,7 +1527,7 @@ export default function Home() {
                       <span>{savedPlan.profile.topic}</span>
                       <small>{savedPlan.profile.durationWeeks} tuần · {savedPlan.profile.videoLanguage === 'en' ? 'English' : 'Tiếng Việt'}</small>
                     </button>
-                    <button className="saved-plan-delete" type="button" onClick={() => deleteSavedPlan(savedPlan)} aria-label="Xóa lộ trình">
+                    <button className="saved-plan-delete" type="button" onClick={() => setPlanDeleteCandidate(savedPlan)} aria-label="Xóa lộ trình">
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -2072,7 +2116,7 @@ export default function Home() {
                             className={isActivePlan && activeVideoLesson?.id === lesson.id ? 'active' : ''}
                             key={`${sourcePlanId}-${lesson.id}`}
                             type="button"
-                            disabled={isQuizInProgress && lesson.id !== activeQuizSessionLessonId}
+                            disabled={isQuizInProgress && videoStateKey(sourcePlan, lesson) !== activeQuizSessionLessonId}
                             onClick={() => selectQuizLesson(sourcePlan, lesson)}
                           >
                             <strong>Tuần {lesson.week}</strong>
@@ -2436,13 +2480,68 @@ export default function Home() {
           </form>
         </div>
       )}
+      {duplicatePlanPrompt && (
+        <div className="schedule-modal-backdrop" role="presentation" onMouseDown={cancelDuplicatePlanPrompt}>
+          <section className="schedule-modal duplicate-plan-modal" role="dialog" aria-modal="true" aria-labelledby="duplicate-plan-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="schedule-modal-head">
+              <div>
+                <p className="eyebrow">Cảnh báo</p>
+                <h2 id="duplicate-plan-title">Tên lộ trình đã tồn tại</h2>
+              </div>
+              <button type="button" onClick={cancelDuplicatePlanPrompt} aria-label="Đóng">
+                ×
+              </button>
+            </div>
+            <p>
+              Bạn đã có lộ trình <strong>{duplicatePlanPrompt.existingPlan.profile.topic}</strong>. Hãy chọn cách xử lý trước khi tạo lộ trình mới.
+            </p>
+            <div className="duplicate-plan-actions">
+              <button className="secondary-button" type="button" disabled={isGenerating} onClick={keepDuplicatePlan}>
+                Giữ lại cả 2
+              </button>
+              <button className="danger-button" type="button" disabled={isGenerating} onClick={replaceDuplicatePlan}>
+                Thay thế
+              </button>
+              <button className="secondary-button" type="button" disabled={isGenerating} onClick={cancelDuplicatePlanPrompt}>
+                Quay lại
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {planDeleteCandidate && (
+        <div className="schedule-modal-backdrop" role="presentation" onMouseDown={() => setPlanDeleteCandidate(null)}>
+          <section className="schedule-modal delete-plan-modal" role="dialog" aria-modal="true" aria-labelledby="delete-plan-title" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="schedule-modal-head">
+              <div>
+                <p className="eyebrow">Cảnh báo</p>
+                <h2 id="delete-plan-title">Xóa lộ trình học?</h2>
+              </div>
+              <button type="button" onClick={() => setPlanDeleteCandidate(null)} aria-label="Đóng">
+                ×
+              </button>
+            </div>
+            <p>
+              Bạn sắp xóa lộ trình <strong>{planDeleteCandidate.profile.topic}</strong>. Lịch học, video đã phân tích, quiz và lịch sử chat liên quan đến lộ trình này cũng sẽ bị xóa.
+            </p>
+            <div className="schedule-modal-actions">
+              <button className="secondary-button" type="button" onClick={() => setPlanDeleteCandidate(null)}>
+                Hủy
+              </button>
+              <button className="danger-button" type="button" onClick={confirmDeleteSavedPlan}>
+                Xóa lộ trình
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
   )
 }
 
 function buildChatTopic(plan: LearningPlan): ChatTopic {
   return {
-    id: stableTopicId(plan.profile),
+    id: plan.storageId ? planStorageId(plan) : stableTopicId(plan.profile),
     topic: plan.profile.topic,
     goal: plan.profile.goal,
     title: plan.title,
@@ -2590,7 +2689,19 @@ function legacyLessonMap<T>(plan: LearningPlan | null, value: T | null | undefin
 }
 
 function planStorageId(plan: LearningPlan) {
+  if (plan.storageId) return plan.storageId
   return slugify(`${plan.profile.topic}-${plan.profile.goal}-${plan.profile.durationWeeks}-${plan.profile.videoLanguage}`)
+}
+
+function withUniquePlanStorageId(plan: LearningPlan): LearningPlan {
+  const storageId = `${slugify(`${plan.profile.topic}-${plan.profile.goal}-${plan.profile.durationWeeks}-${plan.profile.videoLanguage}`)}-${Date.now().toString(36)}`
+  return { ...plan, storageId }
+}
+
+function findDuplicateSavedPlanByTopic(plans: LearningPlan[], topic: string) {
+  const normalizedTopic = normalizeSearchText(topic)
+  if (!normalizedTopic) return null
+  return plans.find((item) => normalizeSearchText(item.profile.topic) === normalizedTopic) || null
 }
 
 function videoJobKey(plan: LearningPlan, lesson: Lesson) {

@@ -2004,6 +2004,13 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.duplicate-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .danger-button {
   background: #fff2f2;
   border: 1px solid #f0c4c4;

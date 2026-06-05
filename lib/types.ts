@@ -112,6 +112,7 @@ export interface PrerequisiteRelationship {
 }
 
 export interface LearningPlan {
+  storageId?: string
   title: string
   summary: string
   prerequisites: string[]
